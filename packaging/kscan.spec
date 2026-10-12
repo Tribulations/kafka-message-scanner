@@ -12,8 +12,9 @@ BuildArch:      noarch
 
 # Deliberately no "Requires: java-*" -- target hosts already provision
 # Java 8 out-of-band, and bin/kscan's own JAVA_HOME resolution
-# (KSCAN_JAVA_HOME env var, else /usr/lib/jvm/java-1.8.0-openjdk) is the
-# only thing that matters at runtime. See the README's "Build" section.
+# (KSCAN_JAVA_HOME env var, else trying a short list of known Java 8
+# install paths) is the only thing that matters at runtime. See the
+# README's "Build" section.
 
 %description
 kscan scans a Kafka topic (a bounded scan, or a live --follow tail) and
@@ -34,9 +35,12 @@ install -m 0644 %{_sourcedir}/scanner.properties %{buildroot}/etc/kscan/scanner.
 ln -sf ../../opt/kscan/bin/kscan %{buildroot}/usr/bin/kscan
 
 %files
+%dir /opt/kscan
+%dir /opt/kscan/bin
 /opt/kscan/kscan.jar
 /opt/kscan/bin/kscan
 /usr/bin/kscan
+%dir /etc/kscan
 %config(noreplace) /etc/kscan/scanner.properties
 
 %changelog

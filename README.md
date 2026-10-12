@@ -7,15 +7,9 @@ exist matching a given key, header, and/or JSON field value. Debugging
 utility, not a library or a service — it runs, prints a result, and exits.
 
 Full requirements/rationale: [`standalone-kafka-scanner-design-prompt.md`](standalone-kafka-scanner-design-prompt.md).
-Living implementation plan: `~/.claude/plans/read-standalone-kafka-scanner-design-pro-hazy-yeti.md`.
-
-> **This README reflects the current state of the build and is updated as
-> each phase lands — it is not a finished product description.** See
-> [Status](#status) for exactly what works today vs. what's still planned.
 
 ## Table of Contents
 
-- [Status](#status)
 - [Build](#build)
 - [Installing via RPM](#installing-via-rpm)
 - [Usage](#usage)
@@ -32,63 +26,7 @@ Living implementation plan: `~/.claude/plans/read-standalone-kafka-scanner-desig
   - [stdout / stderr contract](#stdout--stderr-contract)
 - [Testing](#testing)
 - [Project layout](#project-layout)
-- [Known limitations (not yet implemented)](#known-limitations-not-yet-implemented)
-
-## Status
-
-**Phase 1 (done):** bounded `scan` mode, pretty-only output, the
-connection/auth abstraction, strict CLI + config merge, fail-fast behavior,
-SASL/Kerberos passthrough config. Verified against a real local broker
-(missing topic, unreachable broker, zero-match, and a successful scan all
-produce the documented exit codes and stdout/stderr separation).
-
-**Phase 2 (done):** `match.key`, `match.header`, and `match.field` filters,
-ANDed together. Verified against real topic data on the local broker
-(single filters, combined filters, and strict rejection of a typo'd flag).
-
-**`--list-topics` (done):** lists topic names visible on the cluster and
-exits, no `--topic=` needed. Verified against the local broker (stdout/stderr
-separation, exit 2 on an unreachable broker, strict flag rejection).
-
-**`--follow` (done):** `tail -f`-style unbounded scan -- keeps polling past
-the topic's end-at-start-time instead of stopping there, streaming each
-match to stdout as found, until Ctrl-C/SIGTERM. Verified against the local
-broker: a message produced mid-run was streamed live, and SIGTERM stopped
-the process with the correct 0/1/2 exit code and summary line (not the
-JVM's default 143) in both the some-matches and zero-matches cases.
-
-**Phase 3 (done):** `--output=json` (NDJSON, one object per record) and
-`--output=count` (just the integer, nothing else on stdout) alongside the
-existing `pretty` default, plus `--limit=<n>` (stop after n matches; with
-`--follow`, blocks until n matches show up then exits). Verified against the
-local broker: json output parses as one object per line; count mode prints
-only the total and exits 1 on zero matches; `--follow --limit=2` blocked
-until exactly 2 new records arrived then exited 0 with no signal needed;
-`--follow --output=count` prints the running total live as it grows (not
-silence until the end), verified not to double-print the same final number
-when SIGTERM stops it.
-
-**Phase 5 (done):** `bin/kscan` wrapper script (resolves a Java 8 runtime via
-`KSCAN_JAVA_HOME` or a hardcoded fallback, injects the RPM-installed default
-config path if the caller didn't supply one, `exec`s the jar so exit codes
-and signals pass straight through) and `packaging/kscan.spec` +
-`packaging/build-rpm.sh` (builds `kscan-<version>-1.noarch.rpm`, no `Requires`
-on a Java package, installs to `/opt/kscan` + `/etc/kscan` + a `/usr/bin`
-symlink). Also wired `VERSION` into the build via a Maven `revision`
-property (`mvn package -Drevision=$(cat VERSION)`, used by
-`build-rpm.sh`), so the two never drift apart.
-
-Verified with a real downloaded Temurin 8 JRE (this dev machine only has
-JDK 21) against a simulated install layout and the actual RPM's extracted
-contents: `--help` and `--list-topics` ran correctly through the
-`/usr/bin/kscan` symlink; the wrapper correctly injects `--config=` only
-when the default exists and the caller didn't supply their own (and falls
-through to the jar's own install-relative default otherwise); a missing/
-wrong-version Java at the resolved path is rejected with exit 2 and a clear
-message; the built RPM's file list, permissions, and absence of any `java`
-dependency were all confirmed with `rpm -qlpv`/`rpm -qp --requires`.
-
-**Not yet built:** see [Known limitations](#known-limitations-not-yet-implemented).
+- [Known limitations](#known-limitations)
 
 ## Build
 
@@ -104,8 +42,8 @@ mvn package
 
 `VERSION` (repo root) is the single source of truth for the version number.
 A plain `mvn package` uses the fallback version hardcoded in `pom.xml`'s
-`revision` property (kept in sync with `VERSION` by hand, same as before);
-to actually stamp the real version, pass it explicitly:
+`revision` property (kept in sync with `VERSION` by hand); to actually
+stamp the real version, pass it explicitly:
 
 ```bash
 mvn package -Drevision="$(cat VERSION)"
@@ -135,10 +73,14 @@ provision Java 8 out-of-band (confirmed via `rpm -qp --requires` on the
 built RPM). `bin/kscan` is the only thing that cares where Java actually
 lives:
 
-- Resolves a Java 8 runtime: `$KSCAN_JAVA_HOME` env var, else the hardcoded
-  fallback `/usr/lib/jvm/java-1.8.0-openjdk`. Rejects anything that isn't
-  Java 8 (checked via `java -version`) with exit 2 and a clear message —
-  never silently runs under the wrong major version.
+- Resolves a Java 8 runtime: `$KSCAN_JAVA_HOME` env var, else the first of
+  two hardcoded fallback paths that actually has a `bin/java`
+  (`/usr/lib/jvm/java-1.8.0-openjdk`, then `/usr/lib/jvm/jre-1.8.0-openjdk`
+  — confirmed via podman that a RHEL9/UBI9-style
+  `java-1.8.0-openjdk-headless` install only creates the second one).
+  Rejects anything that isn't Java 8 (checked via `java -version`) with
+  exit 2 and a clear message — never silently runs under the wrong major
+  version.
 - Injects `--config=/etc/kscan/scanner.properties` only if that file exists
   and the caller didn't already pass their own `--config=` — this is what
   bridges the jar's own "look next to me" default (meant for local dev,
@@ -274,7 +216,7 @@ java -jar target/kscan.jar --topic=orders --from=latest --follow --limit=1 --mat
 ### Filters
 
 All given filters are ANDed together — a record must satisfy every one.
-With no filters, every record matches (the Phase 1 behavior).
+With no filters, every record matches.
 
 **`--match.key`** and **`--match.header`** default to **case-insensitive
 substring** — `--match.key=order` matches a key of `ORDER-123`. Two flags
@@ -366,11 +308,11 @@ the external-file format.
 
 Real GSSAPI/KDC ticket exchange is **not** verified in this project yet —
 only the passthrough plumbing (confirmed the Kafka client receives and
-attempts to use these settings). See the plan file for details.
+attempts to use these settings).
 
 ### Exit codes
 
-Stable scriptability contract — documented and kept stable across phases:
+Stable scriptability contract — documented and kept stable across releases:
 
 | Code | Meaning |
 |---|---|
@@ -380,9 +322,10 @@ Stable scriptability contract — documented and kept stable across phases:
 
 ### stdout / stderr contract
 
-stdout contains **only** the scan output (currently: pretty-printed
-records). Connection info, progress, and summary counts go to stderr —
-piping stdout to `jq` or counting lines is always safe.
+stdout contains **only** the output the selected `--output=` mode promises
+(pretty blocks, NDJSON objects, or the bare count) — nothing else, ever.
+Connection info, progress, and summary counts go to stderr, so piping
+stdout to `jq` or counting lines is always safe.
 
 ```bash
 java -jar target/kscan.jar --topic=kc-hello --kafka.bootstrap.servers=localhost:9092 2>/dev/null
@@ -395,36 +338,59 @@ java -jar target/kscan.jar --topic=kc-hello --kafka.bootstrap.servers=localhost:
 mvn test
 ```
 
-Unit tests use Kafka's `MockConsumer` — no live broker needed. They cover
-bounded-scan termination (including non-contiguous/compacted offsets),
-the match limit (including `keepMatches=false` for count mode not
-accumulating records it'll never use), a missing topic, tombstone (null
-key/value) handling, follow-mode streaming past the initial snapshot end
-until cancelled, and each filter/output type (`KeyFilterTest`,
-`HeaderFilterTest`, `FieldFilterTest`, `OutputModeTest`, `JsonOutputWriterTest`,
-`CountOutputWriterTest`) -- matching/not-matching, the missing-header/
-missing-path "never matches" rule, non-JSON values being skipped rather than
-erroring, malformed filter specs being rejected at parse time, and null key/
-value serializing as JSON `null` rather than a placeholder string.
+Unit tests use Kafka's `MockConsumer` — no live broker needed. They cover:
 
-End-to-end behavior (fail-fast on missing topic/unreachable broker,
-zero-match exit code, stdout/stderr separation, `--list-topics`, `--follow`
-including live streaming and clean Ctrl-C/SIGTERM shutdown with the correct
-exit code, `--output=json`/`--output=count`, `--limit`, and `--follow`
-combined with both) has been manually verified against a real local broker
-— not yet automated.
+- **Scan/filter/output logic** (`ScanEngineTest`, `KeyFilterTest`,
+  `HeaderFilterTest`, `FieldFilterTest`, `OutputModeTest`,
+  `JsonOutputWriterTest`, `CountOutputWriterTest`): bounded-scan termination
+  (including non-contiguous/compacted offsets), the match limit (including
+  `keepMatches=false` for count mode not accumulating records it'll never
+  use), a missing topic, tombstone (null key/value) handling, follow-mode
+  streaming past the initial snapshot end until cancelled, matching/not-matching
+  for each filter type, the missing-header/missing-path "never matches" rule,
+  non-JSON values being skipped rather than erroring, malformed filter specs
+  rejected at parse time, and null key/value serializing as JSON `null`
+  rather than a placeholder string.
+- **CLI/config merge** (`CliArgsTest`, `ConfigBuilderTest`): the strict
+  `--key=value`-or-bare-flag parsing contract (unknown flag, the
+  space-separated form, a non-repeatable flag given twice all rejected),
+  the file &lt; `SCANNER_*` env &lt; CLI precedence for scalars and lists,
+  unknown config-file keys and unknown `SCANNER_*` env vars both rejected,
+  `--list-topics` bypassing the required-topic check, and a negative
+  `--limit` rejected.
+- **Connection safety** (`ConsumerPropertiesFactoryTest`): `kafka.group.id`
+  rejected outright; passthrough attempts to weaken
+  `enable.auto.commit`/`allow.auto.create.topics`/the deserializers are all
+  overridden by the hard pins regardless; and the built properties
+  successfully construct a real `KafkaConsumer` (catches client-side
+  property validation with no broker needed).
 
-`bin/kscan` and the built RPM have similarly been manually verified: a real
-downloaded Temurin 8 JRE (this dev box only has JDK 21) run against a
-simulated `/opt/kscan` + `/etc/kscan` + `/usr/bin` symlink layout, and
-separately against the actual RPM's `rpm2cpio`-extracted contents, both
-executing a real scan against the local broker end to end. Also checked:
-the wrapper's Java-8-version rejection and missing-Java handling (exit 2),
-its default-`--config=`-injection logic (fires only when the default exists
-and the caller didn't supply one; otherwise falls through to the jar's own
-default; never overrides an explicit `--config=`), and the RPM's file list,
-permissions, and absence of a `java` dependency via `rpm -qlpv`/`rpm -qp
---requires`.
+End-to-end behavior is verified against a real broker and a real Java 8
+runtime, not just the unit suite: fail-fast on a missing topic/unreachable
+broker, the zero-match exit code, stdout/stderr separation, `--list-topics`,
+`--follow` (live streaming, clean Ctrl-C/SIGTERM shutdown with the correct
+exit code, both alone and combined with `--limit`), `--output=json`,
+`--output=count`, `--match.field` (Jackson), and `--limit`.
+
+`bin/kscan` and the built RPM are verified the same way: a real Java 8
+runtime running the wrapper through the `/usr/bin/kscan` symlink and the
+RPM's actual extracted contents; the wrapper's Java-8-version rejection and
+missing-Java handling (exit 2); its default-`--config=`-injection logic
+(fires only when the default exists and the caller didn't supply one,
+otherwise falls through to the jar's own default, never overrides an
+explicit `--config=`); and the full RPM lifecycle in a container with a
+real `java-1.8.0-openjdk-headless` install — a clean `rpm -ivh` install and
+end-to-end scan, an edited `/etc/kscan/scanner.properties` surviving an
+`rpm -Uvh` upgrade untouched (the new default appears alongside as
+`.rpmnew` once the template actually changes), and a clean `rpm -e` leaving
+no stray files or directories. `rpm -qlpv`/`rpm -qp --requires` confirm the
+file list, permissions, and that no `java` dependency is declared.
+
+A bytecode check (`packaging/check-bytecode.py`, run by `build-rpm.sh`)
+fails the build if any class in the shaded jar (outside
+`META-INF/versions/`/`module-info.class`) targets bytecode newer than
+Java 8 — `--release 8` alone only covers code compiled in this build, not a
+bundled dependency class that itself targets something newer.
 
 ## Project layout
 
@@ -445,16 +411,15 @@ src/test/java/kscan/     unit tests (MockConsumer-based)
 bin/kscan                wrapper script: resolves Java 8, injects default --config=, execs the jar
 packaging/kscan.spec     RPM spec: installs to /opt/kscan, /etc/kscan, a /usr/bin symlink
 packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
+packaging/scanner.properties   neutral config template the RPM ships (topic/bootstrap.servers commented out)
+packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 class in the shaded jar
 ```
 
-## Known limitations (not yet implemented)
+## Known limitations
 
-- No real GSSAPI/Kerberos round-trip test (see [SASL / Kerberos](#sasl--kerberos)).
-- RPM install/upgrade/uninstall lifecycle (e.g. `%pre`/`%post` scriptlets,
-  upgrade behavior) hasn't been exercised beyond a single staged build-and-rpm
-  -qlpv/`--requires`/extract-and-run check — not yet installed on a real host
-  or round-tripped through an actual `rpm -Uvh`/`dnf install`.
-- `bin/kscan`'s hardcoded Java 8 fallback path
-  (`/usr/lib/jvm/java-1.8.0-openjdk`) hasn't been confirmed against the real
-  target hosts' actual out-of-band Java 8 location; override with
-  `KSCAN_JAVA_HOME` if it doesn't match.
+- No real GSSAPI/Kerberos round-trip test (see [SASL / Kerberos](#sasl--kerberos))
+  — only the passthrough plumbing is verified, not an actual ticket exchange
+  against a KDC.
+- `bin/kscan`'s two Java 8 fallback paths cover RHEL/CentOS 7- and
+  9-style installs; if neither matches the real target host, override with
+  `KSCAN_JAVA_HOME` (check `ls /usr/lib/jvm` on that host).

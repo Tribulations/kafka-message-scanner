@@ -10,7 +10,16 @@
 #   /etc/kscan/scanner.properties <- default config (RPM-managed, %config(noreplace))
 set -euo pipefail
 
-DEFAULT_JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk"
+# Both layouts have been seen in practice (confirmed in a UBI9 container):
+# RHEL/CentOS 7-era full-JDK packages create the plain "java-1.8.0-openjdk"
+# name, while a RHEL/CentOS 9-era "java-1.8.0-openjdk-headless" install only
+# creates the "jre-1.8.0-openjdk" alternatives symlink -- there is no plain
+# "java-1.8.0-openjdk" at all in that case. Try both; KSCAN_JAVA_HOME always
+# wins over either.
+DEFAULT_JAVA_HOME_CANDIDATES=(
+    "/usr/lib/jvm/java-1.8.0-openjdk"
+    "/usr/lib/jvm/jre-1.8.0-openjdk"
+)
 DEFAULT_CONFIG="/etc/kscan/scanner.properties"
 
 # readlink -f follows the /usr/bin/kscan symlink to its real location before
@@ -25,12 +34,24 @@ if [ ! -f "$jar_path" ]; then
     exit 2
 fi
 
-java_home="${KSCAN_JAVA_HOME:-$DEFAULT_JAVA_HOME}"
-java_bin="$java_home/bin/java"
-
-if [ ! -x "$java_bin" ]; then
-    echo "kscan: no usable java found at $java_bin -- set KSCAN_JAVA_HOME to a Java 8 install" >&2
-    exit 2
+java_bin=""
+if [ -n "${KSCAN_JAVA_HOME:-}" ]; then
+    java_bin="$KSCAN_JAVA_HOME/bin/java"
+    if [ ! -x "$java_bin" ]; then
+        echo "kscan: no usable java found at $java_bin (from KSCAN_JAVA_HOME)" >&2
+        exit 2
+    fi
+else
+    for candidate in "${DEFAULT_JAVA_HOME_CANDIDATES[@]}"; do
+        if [ -x "$candidate/bin/java" ]; then
+            java_bin="$candidate/bin/java"
+            break
+        fi
+    done
+    if [ -z "$java_bin" ]; then
+        echo "kscan: no usable java found at any of: ${DEFAULT_JAVA_HOME_CANDIDATES[*]} -- set KSCAN_JAVA_HOME to a Java 8 install" >&2
+        exit 2
+    fi
 fi
 
 # Defensive version check: accepts old-style "1.8.x" and new-style "8.x"
