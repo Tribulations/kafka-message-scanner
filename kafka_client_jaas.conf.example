@@ -1,0 +1,21 @@
+// ═══════════════════════════════════════════════════════════════════════
+// Example external JAAS config file for Kerberos (GSSAPI) client auth.
+//
+// Only needed if you point jvm.java.security.auth.login.config at this
+// file from scanner.properties -- the alternative is to skip this file
+// entirely and inline the same Krb5LoginModule line directly into
+// kafka.sasl.jaas.config (see scanner.properties). Both approaches
+// configure the exact same thing; this one is the classic standalone-file
+// style some ops teams already manage centrally.
+//
+// The stanza name "KafkaClient" is required by the Kafka client library --
+// it looks it up by that exact name, not by the file name.
+// ═══════════════════════════════════════════════════════════════════════
+
+KafkaClient {
+    com.sun.security.auth.module.Krb5LoginModule required
+    useKeyTab=true
+    storeKey=true
+    keyTab="/etc/kscan/kscan.keytab"
+    principal="kscan/your-host@YOUR-REALM.COM";
+};
