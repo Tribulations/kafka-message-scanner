@@ -17,6 +17,7 @@ Living implementation plan: `~/.claude/plans/read-standalone-kafka-scanner-desig
 
 - [Status](#status)
 - [Build](#build)
+- [Installing via RPM](#installing-via-rpm)
 - [Usage](#usage)
   - [Quick start](#quick-start)
   - [Flags](#flags)
@@ -67,10 +68,27 @@ until exactly 2 new records arrived then exited 0 with no signal needed;
 silence until the end), verified not to double-print the same final number
 when SIGTERM stops it.
 
-**Not yet built:** the `kscan` wrapper script, RPM packaging. These land in
-later phases — this README's
-[Known limitations](#known-limitations-not-yet-implemented) section tracks
-exactly what's missing at any given point.
+**Phase 5 (done):** `bin/kscan` wrapper script (resolves a Java 8 runtime via
+`KSCAN_JAVA_HOME` or a hardcoded fallback, injects the RPM-installed default
+config path if the caller didn't supply one, `exec`s the jar so exit codes
+and signals pass straight through) and `packaging/kscan.spec` +
+`packaging/build-rpm.sh` (builds `kscan-<version>-1.noarch.rpm`, no `Requires`
+on a Java package, installs to `/opt/kscan` + `/etc/kscan` + a `/usr/bin`
+symlink). Also wired `VERSION` into the build via a Maven `revision`
+property (`mvn package -Drevision=$(cat VERSION)`, used by
+`build-rpm.sh`), so the two never drift apart.
+
+Verified with a real downloaded Temurin 8 JRE (this dev machine only has
+JDK 21) against a simulated install layout and the actual RPM's extracted
+contents: `--help` and `--list-topics` ran correctly through the
+`/usr/bin/kscan` symlink; the wrapper correctly injects `--config=` only
+when the default exists and the caller didn't supply their own (and falls
+through to the jar's own install-relative default otherwise); a missing/
+wrong-version Java at the resolved path is rejected with exit 2 and a clear
+message; the built RPM's file list, permissions, and absence of any `java`
+dependency were all confirmed with `rpm -qlpv`/`rpm -qp --requires`.
+
+**Not yet built:** see [Known limitations](#known-limitations-not-yet-implemented).
 
 ## Build
 
@@ -84,10 +102,59 @@ mvn package
 # -> target/scanner.properties  (copied next to the jar -- see Quick start below)
 ```
 
+`VERSION` (repo root) is the single source of truth for the version number.
+A plain `mvn package` uses the fallback version hardcoded in `pom.xml`'s
+`revision` property (kept in sync with `VERSION` by hand, same as before);
+to actually stamp the real version, pass it explicitly:
+
+```bash
+mvn package -Drevision="$(cat VERSION)"
+```
+
+`packaging/build-rpm.sh` always does this for you — see
+[Installing via RPM](#installing-via-rpm).
+
+## Installing via RPM
+
+```bash
+./packaging/build-rpm.sh
+# -> target/rpmbuild/RPMS/noarch/kscan-<version>-1.noarch.rpm
+```
+
+Installs to:
+
+```
+/opt/kscan/kscan.jar
+/opt/kscan/bin/kscan           <- wrapper script (see below)
+/usr/bin/kscan                 <- symlink to the above, for PATH convenience
+/etc/kscan/scanner.properties  <- default config, %config(noreplace)
+```
+
+No `Requires` on a Java package — target hosts are expected to already
+provision Java 8 out-of-band (confirmed via `rpm -qp --requires` on the
+built RPM). `bin/kscan` is the only thing that cares where Java actually
+lives:
+
+- Resolves a Java 8 runtime: `$KSCAN_JAVA_HOME` env var, else the hardcoded
+  fallback `/usr/lib/jvm/java-1.8.0-openjdk`. Rejects anything that isn't
+  Java 8 (checked via `java -version`) with exit 2 and a clear message —
+  never silently runs under the wrong major version.
+- Injects `--config=/etc/kscan/scanner.properties` only if that file exists
+  and the caller didn't already pass their own `--config=` — this is what
+  bridges the jar's own "look next to me" default (meant for local dev,
+  where the jar and config sit together in `target/`) to the RPM's layout,
+  where the config lives in `/etc/kscan` while the jar lives in `/opt/kscan`.
+- Uses `exec` (not a plain subshell call) so the JVM's real exit code and
+  SIGTERM handling pass straight through the wrapper untouched.
+
+```bash
+kscan --topic=orders --follow --from=latest
+KSCAN_JAVA_HOME=/opt/vendor-jdk8 kscan --list-topics
+```
+
 ## Usage
 
-There's no wrapper script yet (that's a later phase), so run the jar
-directly:
+Run via the installed `kscan` wrapper (see above), or the jar directly:
 
 ```bash
 java -jar target/kscan.jar --topic=<name> [options]
@@ -347,6 +414,18 @@ exit code, `--output=json`/`--output=count`, `--limit`, and `--follow`
 combined with both) has been manually verified against a real local broker
 — not yet automated.
 
+`bin/kscan` and the built RPM have similarly been manually verified: a real
+downloaded Temurin 8 JRE (this dev box only has JDK 21) run against a
+simulated `/opt/kscan` + `/etc/kscan` + `/usr/bin` symlink layout, and
+separately against the actual RPM's `rpm2cpio`-extracted contents, both
+executing a real scan against the local broker end to end. Also checked:
+the wrapper's Java-8-version rejection and missing-Java handling (exit 2),
+its default-`--config=`-injection logic (fires only when the default exists
+and the caller didn't supply one; otherwise falls through to the jar's own
+default; never overrides an explicit `--config=`), and the RPM's file list,
+permissions, and absence of a `java` dependency via `rpm -qlpv`/`rpm -qp
+--requires`.
+
 ## Project layout
 
 ```
@@ -363,11 +442,19 @@ src/main/java/kscan/
   filter/                match.key/match.header/match.field filters, ANDed together
   output/                output writers: pretty, json (NDJSON), count
 src/test/java/kscan/     unit tests (MockConsumer-based)
-bin/, packaging/         reserved for the wrapper script and RPM spec (not yet populated)
+bin/kscan                wrapper script: resolves Java 8, injects default --config=, execs the jar
+packaging/kscan.spec     RPM spec: installs to /opt/kscan, /etc/kscan, a /usr/bin symlink
+packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
 ```
 
 ## Known limitations (not yet implemented)
 
-- No `kscan` wrapper script — invoke the jar directly with `java -jar`.
-- No RPM packaging.
 - No real GSSAPI/Kerberos round-trip test (see [SASL / Kerberos](#sasl--kerberos)).
+- RPM install/upgrade/uninstall lifecycle (e.g. `%pre`/`%post` scriptlets,
+  upgrade behavior) hasn't been exercised beyond a single staged build-and-rpm
+  -qlpv/`--requires`/extract-and-run check — not yet installed on a real host
+  or round-tripped through an actual `rpm -Uvh`/`dnf install`.
+- `bin/kscan`'s hardcoded Java 8 fallback path
+  (`/usr/lib/jvm/java-1.8.0-openjdk`) hasn't been confirmed against the real
+  target hosts' actual out-of-band Java 8 location; override with
+  `KSCAN_JAVA_HOME` if it doesn't match.
