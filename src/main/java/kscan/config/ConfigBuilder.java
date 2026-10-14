@@ -51,6 +51,7 @@ public final class ConfigBuilder {
         MutableValues values = loadFileDefaults(resolution.path, resolution.explicit);
         applyEnvOverrides(values, env);
         applyCliOverrides(values, cli);
+        requireFieldsOnlyWithPrettyOutput(values, cli);
         if (!cli.hasFlag("list-topics")) {
             requireTopic(values);
         }
@@ -61,7 +62,7 @@ public final class ConfigBuilder {
                 ? resolution.path : null;
 
         return new ScannerConfig(values.topic, values.from, values.follow, values.limit, values.partition,
-                values.output, configFileUsed, values.kafkaProps, values.jvmProps, match);
+                values.output, values.fields, configFileUsed, values.kafkaProps, values.jvmProps, match);
     }
 
     /** Config-path resolution has its own file&lt;env&lt;CLI precedence, same as every other setting. */
@@ -243,6 +244,9 @@ public final class ConfigBuilder {
         if (cli.getSingle("output") != null) {
             values.output = cli.getSingle("output");
         }
+        if (cli.getSingle("fields") != null) {
+            values.fields = cli.getSingle("fields");
+        }
         if (cli.getSingle("match.key") != null) {
             values.matchKey = cli.getSingle("match.key");
         }
@@ -283,6 +287,27 @@ public final class ConfigBuilder {
         values.limit = parseStrictLong("max-messages", maxMessages, values.limit);
     }
 
+    /**
+     * --fields only affects pretty output (json already lets a caller select fields via jq; count
+     * never prints record details at all; --list-topics never reaches the output writer either) --
+     * giving it alongside anything else would silently have zero effect, so that's a conflict, not
+     * a silent no-op.
+     */
+    private static void requireFieldsOnlyWithPrettyOutput(MutableValues values, CliArgs cli)
+            throws ConfigLoadException {
+        if (values.fields == null) {
+            return;
+        }
+        if (cli.hasFlag("list-topics")) {
+            throw new ConfigLoadException("--fields has no effect with --list-topics -- give only one");
+        }
+        if (!values.output.equalsIgnoreCase("pretty")) {
+            throw new ConfigLoadException(
+                    "--fields is only valid with --output=pretty (the default) -- it has no effect "
+                            + "with --output=" + values.output);
+        }
+    }
+
     private static void requireTopic(MutableValues values) throws ConfigLoadException {
         if (values.topic == null || values.topic.trim().isEmpty()) {
             throw new ConfigLoadException(
@@ -315,6 +340,7 @@ public final class ConfigBuilder {
         long limit;
         Integer partition;
         String output;
+        String fields;
         String matchKey;
         List<String> matchHeaderRaw = new ArrayList<>();
         List<String> matchFieldRaw = new ArrayList<>();

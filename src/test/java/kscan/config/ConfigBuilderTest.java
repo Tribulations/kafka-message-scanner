@@ -163,6 +163,54 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void fieldsIsCliOnlyAndNullByDefault(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig noFields = ConfigBuilder.build(cli(), configFile, Collections.emptyMap());
+        assertEquals(null, noFields.fields());
+
+        ScannerConfig withFields = ConfigBuilder.build(cli("--fields=key,value"), configFile, Collections.emptyMap());
+        assertEquals("key,value", withFields.fields());
+    }
+
+    @Test
+    void fieldsInTheFileIsRejectedAsAnUnknownKey(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir,
+                "topic=t\nkafka.bootstrap.servers=localhost:9092\nfields=value\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli(), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void fieldsConflictsWithNonPrettyOutput(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--fields=value", "--output=json"), configFile, Collections.emptyMap()));
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--fields=value", "--output=count"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void fieldsConflictsWithListTopics(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--list-topics", "--fields=value"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void fieldsIsFineWithExplicitPrettyOutput(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--fields=value", "--output=pretty"), configFile, Collections.emptyMap());
+
+        assertEquals("value", config.fields());
+    }
+
+    @Test
     void configFileReflectsTheActualResolvedPathWhenOneWasUsed(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -218,7 +266,7 @@ class ConfigBuilderTest {
     }
 
     private static Set<String> knownValueKeys() {
-        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output",
+        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
                 "match.key", "match.header", "match.field");
     }
 

@@ -7,10 +7,12 @@ import kscan.config.ScannerConfig;
 import kscan.filter.RecordFilter;
 import kscan.filter.RecordFilterFactory;
 import kscan.kafka.ConsumerPropertiesFactory;
+import kscan.output.OutputField;
 import kscan.output.OutputMode;
 import kscan.scan.StartPosition;
 
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * Turns parsed CLI args into validated, typed configuration pieces, each failing fast with an
@@ -67,6 +69,20 @@ final class StartupPipeline {
     static OutputMode parseOutputMode(ScannerConfig config) throws ExitSignal {
         try {
             return OutputMode.parse(config.output());
+        } catch (IllegalArgumentException e) {
+            throw new ExitSignal(2, e.getMessage());
+        }
+    }
+
+    /** Null (print every section) if --fields= wasn't given -- {@link ConfigBuilder} already
+     *  rejected it alongside anything other than --output=pretty, so this is the only case left. */
+    static Set<OutputField> parseOutputFields(ScannerConfig config) throws ExitSignal {
+        if (config.fields() == null) {
+            return null;
+        }
+
+        try {
+            return OutputField.parse(config.fields());
         } catch (IllegalArgumentException e) {
             throw new ExitSignal(2, e.getMessage());
         }

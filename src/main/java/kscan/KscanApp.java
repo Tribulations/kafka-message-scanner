@@ -3,10 +3,12 @@ package kscan;
 import kscan.cli.CliArgs;
 import kscan.config.ScannerConfig;
 import kscan.filter.RecordFilter;
+import kscan.output.OutputField;
 import kscan.output.OutputMode;
 import kscan.scan.StartPosition;
 
 import java.util.Properties;
+import java.util.Set;
 
 /** Wires CLI parsing, config, the Kafka consumer, and the scan engine together for one run. */
 final class KscanApp {
@@ -35,8 +37,9 @@ final class KscanApp {
             StartPosition from = StartupPipeline.parseStartPosition(config);
             RecordFilter filter = StartupPipeline.buildFilter(config);
             OutputMode mode = StartupPipeline.parseOutputMode(config);
+            Set<OutputField> fields = StartupPipeline.parseOutputFields(config);
 
-            return ScanRunner.executeScan(kafkaProps, config, from, filter, mode);
+            return ScanRunner.executeScan(kafkaProps, config, from, filter, mode, fields);
         } catch (ExitSignal e) {
             reportExit(e);
 

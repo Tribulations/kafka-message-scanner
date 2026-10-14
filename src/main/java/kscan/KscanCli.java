@@ -89,6 +89,14 @@ final class KscanCli {
             + "                        count: only the integer match count, nothing else on stdout\n"
             + "                        (with --follow, the running total prints as it changes)\n"
             + "                        e.g. --output=json   (pipe to jq)   or   --output=count\n"
+            + "  --fields=<list>       restrict a pretty-output block to just these comma-separated\n"
+            + "                        sections: metadata (topic/partition/offset/timestamp), key,\n"
+            + "                        headers, value -- only valid with --output=pretty (the\n"
+            + "                        default); json already lets you pick fields via jq, and count\n"
+            + "                        never prints record details, so --fields= with either is an\n"
+            + "                        error, not a silent no-op. Also rejects --list-topics for the\n"
+            + "                        same reason (no records are ever printed there either)\n"
+            + "                        e.g. --fields=headers,value   (skip metadata/key when skimming)\n"
             + "  --help                show this message\n"
             + "\n"
             + "Exit codes: 0 = at least one match found, 1 = ran cleanly with zero matches, 2 = error.\n";
@@ -106,7 +114,7 @@ final class KscanCli {
     }
 
     private static Set<String> knownValueKeys() {
-        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output",
+        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
                 "match.key", "match.header", "match.field");
     }
 

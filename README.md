@@ -211,6 +211,7 @@ to a wrong default and then report a false "not found".
 | `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
 | `--partition=<n>` | no | all, interleaved | Restrict the scan to one partition (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
 | `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` (see [Output modes](#output-modes)) |
+| `--fields=<list>` | no | all | Restrict a pretty-output block to comma-separated sections: `metadata`, `key`, `headers`, `value` (CLI-only; only valid with `--output=pretty`, see [Output modes](#output-modes)) |
 | `--help` | no | — | Print usage and exit 0 |
 
 `--kafka.bootstrap.servers=...` is required one way or another (CLI, env,
@@ -314,6 +315,21 @@ summary lines are unaffected):
 ```bash
 java -jar target/kscan.jar --topic=orders --output=json --limit=5 | jq .
 java -jar target/kscan.jar --topic=orders --output=count
+```
+
+`--fields=<list>` restricts a **pretty** block to just the given
+comma-separated sections — `metadata` (topic/partition/offset/timestamp),
+`key`, `headers`, `value` — for skimming many matches without large
+values cluttering the terminal each time. CLI-only (a persisted default
+would silently hide sections on every future run, same reasoning as
+`--partition`). Only valid with `--output=pretty` (the default): `json`
+already lets you pick fields via `jq`, and `count` never prints record
+details, so combining `--fields=` with either — or with `--list-topics`,
+which prints no records at all — is a conflict (exit 2), not a silent
+no-op.
+
+```bash
+java -jar target/kscan.jar --topic=orders --fields=headers,value --limit=5
 ```
 
 `--limit=<n>` stops a scan after `n` matches (`0`, the default, means

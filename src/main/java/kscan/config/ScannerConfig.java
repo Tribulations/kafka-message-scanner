@@ -15,6 +15,7 @@ public final class ScannerConfig {
     private final long limit;
     private final Integer partition;
     private final String output;
+    private final String fields;
     private final Path configFile;
     private final Properties kafkaProperties;
     private final Properties jvmProperties;
@@ -28,6 +29,10 @@ public final class ScannerConfig {
      *                        "not found" hazard class that made earliest the safe --from default.
      * @param output          raw --output value ("pretty", "json", or "count"); parsed/validated by
      *                        {@link kscan.output.OutputMode#parse(String)}, not here.
+     * @param fields          raw --fields value (e.g. "key,value"), or null if unset (print every
+     *                        section); parsed/validated by {@link kscan.output.OutputField#parse(String)},
+     *                        not here. CLI-only (no file/env form), same reasoning as partition: a
+     *                        persisted default would silently hide sections on every future run.
      * @param configFile      the config file actually read for this run, or null if none was (no
      *                        file existed at the resolved, non-explicit default path).
      * @param kafkaProperties kafka.* passthrough properties, already stripped of the "kafka." prefix.
@@ -37,13 +42,15 @@ public final class ScannerConfig {
      *                        Kafka client properties.
      */
     public ScannerConfig(String topic, String from, boolean follow, long limit, Integer partition, String output,
-                          Path configFile, Properties kafkaProperties, Properties jvmProperties, MatchConfig match) {
+                          String fields, Path configFile, Properties kafkaProperties, Properties jvmProperties,
+                          MatchConfig match) {
         this.topic = topic;
         this.from = from;
         this.follow = follow;
         this.limit = limit;
         this.partition = partition;
         this.output = output;
+        this.fields = fields;
         this.configFile = configFile;
         this.kafkaProperties = kafkaProperties;
         this.jvmProperties = jvmProperties;
@@ -78,6 +85,11 @@ public final class ScannerConfig {
     /** Raw --output value ("pretty", "json", or "count"); not yet parsed/validated. */
     public String output() {
         return output;
+    }
+
+    /** Raw --fields value, or null if unset (print every section); not yet parsed/validated. */
+    public String fields() {
+        return fields;
     }
 
     /** The config file actually read for this run, or null if none was (no file existed to read). */

@@ -4,6 +4,7 @@ import kscan.config.ScannerConfig;
 import kscan.filter.RecordFilter;
 import kscan.output.CountOutputWriter;
 import kscan.output.JsonOutputWriter;
+import kscan.output.OutputField;
 import kscan.output.OutputMode;
 import kscan.output.OutputWriter;
 import kscan.output.PrettyOutputWriter;
@@ -56,7 +57,7 @@ final class ScanRunner {
 
     /** Opens the consumer, runs the scan, writes the result, and maps the outcome to an exit code. */
     static int executeScan(Properties kafkaProps, ScannerConfig config, StartPosition from,
-                            RecordFilter filter, OutputMode mode) throws ExitSignal {
+                            RecordFilter filter, OutputMode mode, Set<OutputField> fields) throws ExitSignal {
         logConnectionSummary(kafkaProps, config);
 
         try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(kafkaProps)) {
@@ -66,7 +67,7 @@ final class ScanRunner {
             int exitCode = 2;
 
             try {
-                OutputWriter writer = newWriter(mode);
+                OutputWriter writer = newWriter(mode, fields);
                 ScanResult result = runScan(consumer, config, from, filter, mode, writer);
                 writeResult(result, writer);
                 logResultSummary(result, kafkaProps, config);
@@ -92,18 +93,18 @@ final class ScanRunner {
         System.err.println("kscan: connecting to bootstrap.servers=" + bootstrapServers(kafkaProps)
                 + " topic=" + config.topic() + partitionSuffix(config)
                 + " from=" + config.from() + limitSuffix(config) + " output=" + config.output()
-                + " config=" + configFileSuffix(config)
+                + fieldsSuffix(config) + " config=" + configFileSuffix(config)
                 + "\n");
     }
 
-    private static OutputWriter newWriter(OutputMode mode) {
+    private static OutputWriter newWriter(OutputMode mode, Set<OutputField> fields) {
         switch (mode) {
             case JSON:
                 return new JsonOutputWriter();
             case COUNT:
                 return new CountOutputWriter();
             default:
-                return new PrettyOutputWriter();
+                return new PrettyOutputWriter(fields);
         }
     }
 
@@ -170,5 +171,13 @@ final class ScanRunner {
     /** The resolved config file path, or "<none>" if no file was actually read for this run. */
     private static String configFileSuffix(ScannerConfig config) {
         return config.configFile() == null ? "<none>" : config.configFile().toString();
+    }
+
+    /**
+     * " fields=<raw>" when --fields= restricted which sections print, else empty -- so a run
+     * that's only showing a subset of each record is never mistaken for one showing everything.
+     */
+    private static String fieldsSuffix(ScannerConfig config) {
+        return config.fields() == null ? "" : " fields=" + config.fields();
     }
 }
