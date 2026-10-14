@@ -506,7 +506,13 @@ VERSION                  single source of truth for the version number
 scanner.properties       config file template, fully commented
 kafka_client_jaas.conf.example   external JAAS file example for Kerberos
 src/main/java/kscan/
-  Main.java              entry point: wires everything together, exit codes
+  Main.java                 entry point only: System.exit(KscanApp.run(args))
+  KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics -> exit code
+  KscanCli.java             kscan's flag schema, --help text, and CLI parsing wiring
+  StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/filter/etc.
+  ScanRunner.java           opens the consumer, runs the scan or --list-topics, reports the result
+  ShutdownCoordinator.java  Ctrl-C/SIGTERM handling so --follow exits 0/1/2, never 143
+  ExitSignal.java           shared exit-code-carrying exception used across the above
   cli/                   strict CLI argument parsing
   config/                config file + env + CLI merge and validation
   kafka/                 the one class that touches connection/auth settings

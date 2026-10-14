@@ -1,0 +1,106 @@
+package kscan;
+
+import kscan.cli.CliArgs;
+import kscan.cli.CliParseException;
+
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+/**
+ * kscan's own specific command-line schema: which flags exist, the usage text describing them,
+ * and the wiring that turns raw args into a validated {@link CliArgs}. Distinct from
+ * {@link CliArgs} itself, which is the generic, reusable strict parser this wraps.
+ */
+final class KscanCli {
+
+    static final String USAGE =
+            "Usage: kscan --topic=<name> [options]\n"
+            + "\n"
+            + "  --topic=<name>        topic to scan (required), e.g. --topic=orders\n"
+            + "  --from=<pos>          starting Kafka offset/position to read from: earliest | latest |\n"
+            + "                        <epoch-ms> (a timestamp, resolved to the offset at/after it) |\n"
+            + "                        offset:<n> (jump straight to a known offset; requires scanning\n"
+            + "                        exactly one partition, so pair it with --partition= unless the\n"
+            + "                        topic only has one)  (default: earliest)\n"
+            + "                        e.g. --from=latest  or  --from=1700000000000\n"
+            + "                             --partition=2 --from=offset:3801 --limit=1  (jump to one record)\n"
+            + "  --follow              keep polling for new records after reaching the current end\n"
+            + "                        (tail -f style); stops on Ctrl-C/SIGTERM\n"
+            + "                        e.g. --follow --from=latest   (only see records from now on)\n"
+            + "  --config=<path>       path to scanner.properties (default: next to the jar)\n"
+            + "                        e.g. --config=/etc/kscan/scanner.properties\n"
+            + "  --list-topics         list topic names visible on the cluster and exit (no --topic= needed)\n"
+            + "  --kafka.<prop>=<val>  arbitrary Kafka client property, e.g. --kafka.bootstrap.servers=host:9092\n"
+            + "                        for SASL/Kerberos: --kafka.security.protocol=SASL_PLAINTEXT\n"
+            + "                        --kafka.sasl.mechanism=GSSAPI --kafka.sasl.jaas.config=...\n"
+            + "  --jvm.<prop>=<val>    JVM system property Kerberos needs but isn't a Kafka client property,\n"
+            + "                        e.g. --jvm.java.security.auth.login.config=/path/to/kafka_client_jaas.conf\n"
+            + "                        --jvm.java.security.krb5.conf=/etc/krb5.conf\n"
+            + "  --match.key=<val>     match records whose key contains <val> (case-insensitive substring)\n"
+            + "                        e.g. --match.key=order-42\n"
+            + "  --match.header=<n>=<v> match records with header <n> containing <v>; repeatable, ANDed together\n"
+            + "                        e.g. --match.header=source=web\n"
+            + "  --match.field=<spec>  match JSON field in the record value; repeatable, ANDed together\n"
+            + "                        <spec> is path=value (equals), path!=value (not-equals),\n"
+            + "                        or path~regex (substring/contains regex) -- a bare path with\n"
+            + "                        no operator (e.g. --match.field=order_id) is an error\n"
+            + "                        path~regex is a SUBSTRING search: regex anchors like ^/$ still\n"
+            + "                        work, but leaving one end open means \"starts/ends with\", not\n"
+            + "                        \"equals\" -- e.g. for an ISO-8601 ts field, ts~^2026-10-22\n"
+            + "                        matches every timestamp on that day regardless of time of day\n"
+            + "                        e.g. --match.field=order_id=1234\n"
+            + "                             --match.field=status!=DONE\n"
+            + "                             --match.field=customer.id~^c-   (dotted path, substring regex)\n"
+            + "                             --match.field=ts~^2026-10-22   (all timestamps on that day)\n"
+            + "  --match.exact         require match.key/match.header to match the full value, not a substring\n"
+            + "  --match.case-sensitive  compare match.key/match.header case-sensitively\n"
+            + "  --limit=<n>           stop after n matches (default: 0 = unlimited); with --follow,\n"
+            + "                        blocks until n matches show up, then exits\n"
+            + "                        e.g. --limit=5   or   --follow --limit=1 --match.key=order-42\n"
+            + "  --max-messages=<n>    alias for --limit (same meaning; Kafka's own console-consumer\n"
+            + "                        tooling calls this --max-messages) -- give only one of the two\n"
+            + "                        e.g. --max-messages=50\n"
+            + "  --partition=<n>       restrict the scan to one partition (default: all, interleaved);\n"
+            + "                        Kafka only guarantees order within a partition, so use this to\n"
+            + "                        see a topic's strict per-partition message order\n"
+            + "                        e.g. --partition=0\n"
+            + "  --output=<mode>       pretty | json | count  (default: pretty)\n"
+            + "                        pretty: human-readable block per record\n"
+            + "                        json: one JSON object per record, one line each (NDJSON)\n"
+            + "                        count: only the integer match count, nothing else on stdout\n"
+            + "                        (with --follow, the running total prints as it changes)\n"
+            + "                        e.g. --output=json   (pipe to jq)   or   --output=count\n"
+            + "  --help                show this message\n"
+            + "\n"
+            + "Exit codes: 0 = at least one match found, 1 = ran cleanly with zero matches, 2 = error.\n";
+
+    private KscanCli() {
+    }
+
+    /** Parses {@code args} against kscan's known flag schema, or fails with a usage-printing {@link ExitSignal}. */
+    static CliArgs parse(String[] args) throws ExitSignal {
+        try {
+            return CliArgs.parse(args, knownValueKeys(), knownBooleanKeys(), repeatableKeys());
+        } catch (CliParseException e) {
+            throw new ExitSignal(2, e.getMessage(), true);
+        }
+    }
+
+    private static Set<String> knownValueKeys() {
+        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output",
+                "match.key", "match.header", "match.field");
+    }
+
+    private static Set<String> knownBooleanKeys() {
+        return setOf("help", "list-topics", "follow", "match.exact", "match.case-sensitive");
+    }
+
+    private static Set<String> repeatableKeys() {
+        return setOf("match.header", "match.field");
+    }
+
+    private static Set<String> setOf(String... values) {
+        return new LinkedHashSet<>(Arrays.asList(values));
+    }
+}
