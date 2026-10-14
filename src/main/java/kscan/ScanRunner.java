@@ -142,7 +142,7 @@ final class ScanRunner {
     }
 
     private static void logResultSummary(ScanResult result, Properties kafkaProps, ScannerConfig config) {
-        System.err.println("kscan: " + result.matchCount() + " matched on topic=" + config.topic()
+        System.err.println("\nkscan: " + result.matchCount() + " matched on topic=" + config.topic()
                 + partitionSuffix(config) + limitSuffix(config)
                 + " bootstrap.servers=" + bootstrapServers(kafkaProps));
     }
