@@ -57,8 +57,8 @@ public final class ConfigBuilder {
         MatchConfig match = new MatchConfig(values.matchKey, values.matchHeaderRaw, values.matchFieldRaw,
                 values.matchExact, values.matchCaseSensitive);
 
-        return new ScannerConfig(values.topic, values.from, values.follow, values.limit, values.output,
-                values.kafkaProps, values.jvmProps, match);
+        return new ScannerConfig(values.topic, values.from, values.follow, values.limit, values.partition,
+                values.output, values.kafkaProps, values.jvmProps, match);
     }
 
     /** Config-path resolution has its own file&lt;env&lt;CLI precedence, same as every other setting. */
@@ -148,6 +148,30 @@ public final class ConfigBuilder {
         }
     }
 
+    /**
+     * A non-negative integer partition number, or null if unset. Unlike {@code limit}, partition
+     * {@code 0} is a common, perfectly valid value, so there's no safe sentinel for "unset" other
+     * than null.
+     */
+    private static Integer parseStrictPartition(String key, String raw, Integer defaultValue)
+            throws ConfigLoadException {
+        if (raw == null) {
+            return defaultValue;
+        }
+
+        try {
+            int value = Integer.parseInt(raw.trim());
+            if (value < 0) {
+                throw new NumberFormatException("negative");
+            }
+
+            return value;
+        } catch (NumberFormatException e) {
+            throw new ConfigLoadException(
+                    "invalid value for " + key + ": '" + raw + "' (expected a non-negative integer)");
+        }
+    }
+
     private static void applyEnvOverrides(MutableValues values, Map<String, String> env)
             throws ConfigLoadException {
         for (Map.Entry<String, String> e : env.entrySet()) {
@@ -209,6 +233,10 @@ public final class ConfigBuilder {
         if (cli.getSingle("limit") != null) {
             values.limit = parseStrictLong("limit", cli.getSingle("limit"), values.limit);
         }
+        applyMaxMessagesAlias(values, cli);
+        if (cli.getSingle("partition") != null) {
+            values.partition = parseStrictPartition("partition", cli.getSingle("partition"), values.partition);
+        }
         if (cli.getSingle("output") != null) {
             values.output = cli.getSingle("output");
         }
@@ -231,6 +259,25 @@ public final class ConfigBuilder {
         }
         values.kafkaProps.putAll(cli.kafkaPassthrough());
         values.jvmProps.putAll(cli.jvmPassthrough());
+    }
+
+    /**
+     * --max-messages is a CLI-only alias for --limit (Kafka's own console-consumer tooling uses
+     * this name): same meaning, same storage, just a second accepted flag name. Giving both on the
+     * CLI at once is a conflict, not "last one wins" -- consistent with this tool's rule of
+     * rejecting ambiguity rather than silently picking a default.
+     */
+    private static void applyMaxMessagesAlias(MutableValues values, CliArgs cli) throws ConfigLoadException {
+        String maxMessages = cli.getSingle("max-messages");
+        if (maxMessages == null) {
+            return;
+        }
+        if (cli.getSingle("limit") != null) {
+            throw new ConfigLoadException(
+                    "--limit and --max-messages are aliases for the same setting -- give only one");
+        }
+
+        values.limit = parseStrictLong("max-messages", maxMessages, values.limit);
     }
 
     private static void requireTopic(MutableValues values) throws ConfigLoadException {
@@ -263,6 +310,7 @@ public final class ConfigBuilder {
         String from;
         boolean follow;
         long limit;
+        Integer partition;
         String output;
         String matchKey;
         List<String> matchHeaderRaw = new ArrayList<>();

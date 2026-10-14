@@ -115,6 +115,53 @@ class ConfigBuilderTest {
                 () -> ConfigBuilder.build(cli(), configFile, Collections.emptyMap()));
     }
 
+    @Test
+    void maxMessagesIsAPureAliasForLimit(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli("--max-messages=5"), configFile, Collections.emptyMap());
+
+        assertEquals(5L, config.limit());
+    }
+
+    @Test
+    void limitAndMaxMessagesTogetherIsRejectedAsAConflict(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () ->
+                ConfigBuilder.build(cli("--limit=1", "--max-messages=1"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void partitionIsCliOnlyAndNullByDefault(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig noPartition = ConfigBuilder.build(cli(), configFile, Collections.emptyMap());
+        assertEquals(null, noPartition.partition());
+
+        ScannerConfig withPartition = ConfigBuilder.build(cli("--partition=2"), configFile, Collections.emptyMap());
+        assertEquals(Integer.valueOf(2), withPartition.partition());
+    }
+
+    @Test
+    void invalidPartitionValuesAreRejected(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () ->
+                ConfigBuilder.build(cli("--partition=-1"), configFile, Collections.emptyMap()));
+        assertThrows(ConfigLoadException.class, () ->
+                ConfigBuilder.build(cli("--partition=abc"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void partitionInTheFileIsRejectedAsAnUnknownKey(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir,
+                "topic=t\nkafka.bootstrap.servers=localhost:9092\npartition=0\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli(), configFile, Collections.emptyMap()));
+    }
+
     private static Path writeConfig(Path dir, String contents) throws IOException {
         Path file = dir.resolve("scanner.properties");
         Files.write(file, contents.getBytes(StandardCharsets.UTF_8));
@@ -152,7 +199,8 @@ class ConfigBuilderTest {
     }
 
     private static Set<String> knownValueKeys() {
-        return setOf("config", "topic", "from", "limit", "output", "match.key", "match.header", "match.field");
+        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output",
+                "match.key", "match.header", "match.field");
     }
 
     private static Set<String> knownBooleanKeys() {

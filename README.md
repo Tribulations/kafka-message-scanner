@@ -14,9 +14,12 @@ Full requirements/rationale: [`standalone-kafka-scanner-design-prompt.md`](stand
 - [Installing via RPM](#installing-via-rpm)
 - [Usage](#usage)
   - [Quick start](#quick-start)
+  - [A typical debugging session](#a-typical-debugging-session)
   - [Flags](#flags)
   - [Listing topics](#listing-topics)
   - [Following a topic (tail -f)](#following-a-topic-tail--f)
+  - [Restricting to one partition](#restricting-to-one-partition)
+  - [Jumping to a known offset](#jumping-to-a-known-offset)
   - [Output modes](#output-modes)
   - [Filters](#filters)
   - [Config file](#config-file)
@@ -38,6 +41,17 @@ of which JDK compiles it.
 mvn package
 # -> target/kscan.jar           (shaded/fat jar, no runtime dependency resolution needed)
 # -> target/scanner.properties  (copied next to the jar -- see Quick start below)
+```
+
+A `Makefile` wraps the common commands as named targets (`make` alone
+builds the jar):
+
+```bash
+make        # same as mvn package
+make test   # same as mvn test
+make rpm    # same as ./packaging/build-rpm.sh
+make clean  # same as mvn clean
+make help   # list the above
 ```
 
 `VERSION` (repo root) is the single source of truth for the version number.
@@ -123,6 +137,36 @@ java -jar target/kscan.jar --from=latest
 java -jar target/kscan.jar --topic=kc-orders --kafka.bootstrap.servers=some-other-host:9092
 ```
 
+### A typical debugging session
+
+A natural way to approach an unfamiliar cluster — list what's there, learn
+one topic's shape with an unfiltered sample, then scan it for something
+specific:
+
+```bash
+# 1. See what topics exist
+java -jar target/kscan.jar --list-topics
+
+# 2. Oldest 50 messages, unfiltered (from=earliest is the default), to learn the shape
+java -jar target/kscan.jar --topic=orders --limit=50
+
+# 3. Now scan for something specific
+java -jar target/kscan.jar --topic=orders --match.field=status=NEW
+```
+
+Step 2 works for inspection because `--limit` isn't tied to filters — with
+none given, every record matches, so it just caps how many you see.
+`--output=json` instead of the pretty default is also worth knowing about
+here if you want to pipe the sample to `jq` to look at field names.
+
+To instead see what *recent* messages look like rather than the oldest
+ones, no extra flag is needed — `--from=` already accepts an epoch-ms
+timestamp:
+
+```bash
+java -jar target/kscan.jar --topic=orders --from=$(date -d '1 hour ago' +%s%3N) --limit=50
+```
+
 ### Flags
 
 Every flag is `--key=value`, or a bare `--flag` for documented booleans.
@@ -133,7 +177,7 @@ rather than permissive.
 | Flag | Required | Default | Meaning |
 |---|---|---|---|
 | `--topic=<name>` | yes (or via config/env) | — | Topic to scan |
-| `--from=<pos>` | no | `earliest` | `earliest` \| `latest` \| `<epoch-ms>` |
+| `--from=<pos>` | no | `earliest` | `earliest` \| `latest` \| `<epoch-ms>` \| `offset:<n>` (see [Jumping to a known offset](#jumping-to-a-known-offset)) |
 | `--follow` | no | off | Keep polling for new records after reaching the current end (`tail -f` style); stops on Ctrl-C/SIGTERM |
 | `--config=<path>` | no | next to the jar | Path to a `scanner.properties`-style file |
 | `--list-topics` | no | off | List topic names on the cluster and exit; `--topic=` not required |
@@ -145,6 +189,8 @@ rather than permissive.
 | `--match.exact` | no | off | Require `match.key`/`match.header` to match the full value, not a substring |
 | `--match.case-sensitive` | no | off | Compare `match.key`/`match.header` case-sensitively |
 | `--limit=<n>` | no | `0` (unlimited) | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
+| `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
+| `--partition=<n>` | no | all, interleaved | Restrict the scan to one partition (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
 | `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` (see [Output modes](#output-modes)) |
 | `--help` | no | — | Print usage and exit 0 |
 
@@ -182,6 +228,47 @@ summary line and exit code (0/1/2) a bounded scan would, and does **not**
 exit with the shell's default 128+signal code. A quiet topic never triggers
 the stall-failure that a bounded scan would (an idle topic is exactly what
 following should tolerate).
+
+### Restricting to one partition
+
+By default kscan scans every partition of a topic, interleaved as the
+broker returns records — Kafka only guarantees ordering *within* a
+partition, never across them, so the order you see mixes several
+independent sequences. `--partition=<n>` restricts the scan (and `--follow`)
+to exactly one partition, so what you see is that partition's real,
+strictly-ordered sequence:
+
+```bash
+java -jar target/kscan.jar --topic=orders --partition=1 --limit=10
+```
+
+A partition number the topic doesn't have exits 2 with a clear error
+naming how many it actually has. `--partition` is CLI-only — it has no
+`scanner.properties`/`SCANNER_PARTITION` form, deliberately: a persisted
+default partition would silently narrow every future scan on an install,
+the same false-"not found" hazard class that made `earliest` the safe
+default for `--from`.
+
+Combined with `--from=offset:<n>` (see below), this is also how to jump
+straight to one specific, already-known record instead of scanning for it.
+
+### Jumping to a known offset
+
+`--from=offset:<n>` seeks directly to that offset instead of
+`earliest`/`latest`/a timestamp — an O(1) jump, not a scan. Since an offset
+is partition-relative, this requires scanning exactly one partition: pair
+it with `--partition=` (or omit `--partition=` if the topic genuinely only
+has one). The main use is pinpointing one already-known record, e.g. one
+you noticed in an earlier scan's `offset:` line:
+
+```bash
+java -jar target/kscan.jar --topic=orders --partition=2 --from=offset:3801 --limit=1
+```
+
+There's deliberately no separate "match by offset" filter for this — seeking
+straight there is both simpler and strictly cheaper than scanning from the
+start and comparing every record's offset, which only pays for itself when
+you *don't* already know the exact position.
 
 ### Output modes
 
@@ -234,7 +321,12 @@ its own mini-language (unaffected by `--match.exact`/`--match.case-sensitive`):
 - `path!=value` — not-equals (a missing path is treated as "no match", same
   rule as a missing header above)
 - `path~regex` — **substring/contains** regex search, not a whole-value
-  match (`id~^10` matches a value of `"1001"`)
+  match (`id~^10` matches a value of `"1001"`). Regex anchors (`^`, `$`)
+  still work as anchors — leaving one end open means "starts/ends with",
+  not "equals". This is how to match a date range on an ISO-8601 field
+  without a dedicated date flag: `ts~^2026-10-22` matches every value
+  starting with that date, i.e. every timestamp on that day regardless of
+  time of day.
 
 A record whose value isn't valid JSON is skipped (never matches), not an
 error — this tool is meant to be pointed at real, messy production topics
@@ -253,6 +345,9 @@ java -jar target/kscan.jar --topic=kc-orders-validated --match.field=status!=NEW
 
 # substring regex on a JSON field
 java -jar target/kscan.jar --topic=kc-orders --match.field=orderId~^10
+
+# every timestamp on a given day (substring regex, anchored at the start)
+java -jar target/kscan.jar --topic=kc-orders --match.field=ts~^2026-10-22
 ```
 
 ### Config file
@@ -290,6 +385,12 @@ all** — only the CLI's repeatable flags or the file's numbered keys
 since a `~regex` value may legitimately contain one, e.g. `{1,3}`). If the
 CLI gives any `--match.header`/`--match.field` at all, it fully **replaces**
 the file/env list rather than appending to it.
+
+`--partition` is likewise **CLI-only, no file or env form at all** —
+deliberately, since a persisted default partition would silently narrow
+every future scan on an install. `--max-messages` is a CLI-only alias for
+`--limit`; set `limit=`/`SCANNER_LIMIT` in the file/env if you want that
+persisted, since `--max-messages` itself has no second file/env name.
 
 ### SASL / Kerberos
 
@@ -340,24 +441,29 @@ mvn test
 
 Unit tests use Kafka's `MockConsumer` — no live broker needed. They cover:
 
-- **Scan/filter/output logic** (`ScanEngineTest`, `KeyFilterTest`,
-  `HeaderFilterTest`, `FieldFilterTest`, `OutputModeTest`,
+- **Scan/filter/output logic** (`ScanEngineTest`, `StartPositionTest`,
+  `KeyFilterTest`, `HeaderFilterTest`, `FieldFilterTest`, `OutputModeTest`,
   `JsonOutputWriterTest`, `CountOutputWriterTest`): bounded-scan termination
   (including non-contiguous/compacted offsets), the match limit (including
   `keepMatches=false` for count mode not accumulating records it'll never
   use), a missing topic, tombstone (null key/value) handling, follow-mode
-  streaming past the initial snapshot end until cancelled, matching/not-matching
-  for each filter type, the missing-header/missing-path "never matches" rule,
-  non-JSON values being skipped rather than erroring, malformed filter specs
-  rejected at parse time, and null key/value serializing as JSON `null`
-  rather than a placeholder string.
+  streaming past the initial snapshot end until cancelled, `--partition`
+  restricting the scan to one partition (and a nonexistent partition
+  rejected), `offset:<n>` parsing and seeking (resuming from exactly that
+  offset, and rejected when more than one partition is assigned),
+  matching/not-matching for each filter type, the missing-header/missing-path
+  "never matches" rule, non-JSON values being skipped rather than erroring,
+  malformed filter specs rejected at parse time, and null key/value
+  serializing as JSON `null` rather than a placeholder string.
 - **CLI/config merge** (`CliArgsTest`, `ConfigBuilderTest`): the strict
   `--key=value`-or-bare-flag parsing contract (unknown flag, the
   space-separated form, a non-repeatable flag given twice all rejected),
   the file &lt; `SCANNER_*` env &lt; CLI precedence for scalars and lists,
   unknown config-file keys and unknown `SCANNER_*` env vars both rejected,
-  `--list-topics` bypassing the required-topic check, and a negative
-  `--limit` rejected.
+  `--list-topics` bypassing the required-topic check, a negative `--limit`
+  rejected, `--max-messages` behaving as a pure alias for `--limit` (and
+  the two together rejected as a conflict), and `--partition` parsing as a
+  CLI-only setting (rejected if given in the config file).
 - **Connection safety** (`ConsumerPropertiesFactoryTest`): `kafka.group.id`
   rejected outright; passthrough attempts to weaken
   `enable.auto.commit`/`allow.auto.create.topics`/the deserializers are all

@@ -36,9 +36,12 @@ public final class Main {
             + "\n"
             + "  --topic=<name>        topic to scan (required), e.g. --topic=orders\n"
             + "  --from=<pos>          starting Kafka offset/position to read from: earliest | latest |\n"
-            + "                        <epoch-ms> (a timestamp, resolved to the offset at/after it)\n"
-            + "                        (default: earliest)\n"
+            + "                        <epoch-ms> (a timestamp, resolved to the offset at/after it) |\n"
+            + "                        offset:<n> (jump straight to a known offset; requires scanning\n"
+            + "                        exactly one partition, so pair it with --partition= unless the\n"
+            + "                        topic only has one)  (default: earliest)\n"
             + "                        e.g. --from=latest  or  --from=1700000000000\n"
+            + "                             --partition=2 --from=offset:3801 --limit=1  (jump to one record)\n"
             + "  --follow              keep polling for new records after reaching the current end\n"
             + "                        (tail -f style); stops on Ctrl-C/SIGTERM\n"
             + "                        e.g. --follow --from=latest   (only see records from now on)\n"
@@ -59,14 +62,26 @@ public final class Main {
             + "                        <spec> is path=value (equals), path!=value (not-equals),\n"
             + "                        or path~regex (substring/contains regex) -- a bare path with\n"
             + "                        no operator (e.g. --match.field=order_id) is an error\n"
+            + "                        path~regex is a SUBSTRING search: regex anchors like ^/$ still\n"
+            + "                        work, but leaving one end open means \"starts/ends with\", not\n"
+            + "                        \"equals\" -- e.g. for an ISO-8601 ts field, ts~^2026-10-22\n"
+            + "                        matches every timestamp on that day regardless of time of day\n"
             + "                        e.g. --match.field=order_id=1234\n"
             + "                             --match.field=status!=DONE\n"
             + "                             --match.field=customer.id~^c-   (dotted path, substring regex)\n"
+            + "                             --match.field=ts~^2026-10-22   (all timestamps on that day)\n"
             + "  --match.exact         require match.key/match.header to match the full value, not a substring\n"
             + "  --match.case-sensitive  compare match.key/match.header case-sensitively\n"
             + "  --limit=<n>           stop after n matches (default: 0 = unlimited); with --follow,\n"
             + "                        blocks until n matches show up, then exits\n"
             + "                        e.g. --limit=5   or   --follow --limit=1 --match.key=order-42\n"
+            + "  --max-messages=<n>    alias for --limit (same meaning; Kafka's own console-consumer\n"
+            + "                        tooling calls this --max-messages) -- give only one of the two\n"
+            + "                        e.g. --max-messages=50\n"
+            + "  --partition=<n>       restrict the scan to one partition (default: all, interleaved);\n"
+            + "                        Kafka only guarantees order within a partition, so use this to\n"
+            + "                        see a topic's strict per-partition message order\n"
+            + "                        e.g. --partition=0\n"
             + "  --output=<mode>       pretty | json | count  (default: pretty)\n"
             + "                        pretty: human-readable block per record\n"
             + "                        json: one JSON object per record, one line each (NDJSON)\n"
@@ -122,7 +137,8 @@ public final class Main {
     }
 
     private static Set<String> knownValueKeys() {
-        return setOf("config", "topic", "from", "limit", "output", "match.key", "match.header", "match.field");
+        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output",
+                "match.key", "match.header", "match.field");
     }
 
     private static Set<String> knownBooleanKeys() {
@@ -186,7 +202,7 @@ public final class Main {
 
     private static void logConnectionSummary(Properties kafkaProps, ScannerConfig config) {
         System.err.println("kscan: connecting to bootstrap.servers=" + bootstrapServers(kafkaProps)
-                + " topic=" + config.topic());
+                + " topic=" + config.topic() + partitionSuffix(config));
     }
 
     /**
@@ -324,7 +340,7 @@ public final class Main {
             boolean keepMatches = mode != OutputMode.COUNT;
 
             return ScanEngine.scan(consumer, config.topic(), from, filter, config.limit(), config.follow(),
-                    keepMatches, onMatch);
+                    keepMatches, onMatch, config.partition());
         } catch (ScanException e) {
             throw new ExitSignal(2, e.getMessage());
         }
@@ -336,11 +352,20 @@ public final class Main {
 
     private static void logResultSummary(ScanResult result, Properties kafkaProps, ScannerConfig config) {
         System.err.println("kscan: " + result.matchCount() + " matched on topic=" + config.topic()
-                + " bootstrap.servers=" + bootstrapServers(kafkaProps));
+                + partitionSuffix(config) + " bootstrap.servers=" + bootstrapServers(kafkaProps));
     }
 
     private static String bootstrapServers(Properties kafkaProps) {
         return kafkaProps.getProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG);
+    }
+
+    /**
+     * " partition=N" when a scan is restricted to one partition, else empty -- without this, a
+     * --partition=3 zero-match result reads identically to a whole-topic zero-match result on
+     * stderr, which breaks "0 matched must always be attributable to exactly what was checked."
+     */
+    private static String partitionSuffix(ScannerConfig config) {
+        return config.partition() == null ? "" : " partition=" + config.partition();
     }
 
     private static void reportExit(ExitSignal e) {

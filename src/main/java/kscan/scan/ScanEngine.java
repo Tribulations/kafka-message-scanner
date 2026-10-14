@@ -11,6 +11,7 @@ import org.apache.kafka.common.errors.WakeupException;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,7 @@ public final class ScanEngine {
     private final boolean follow;
     private final boolean keepMatches;
     private final MatchHandler onMatch;
+    private final Integer partition;
 
     private List<TopicPartition> partitions;
     private Map<TopicPartition, Long> snapshotEnd;
@@ -44,13 +46,14 @@ public final class ScanEngine {
     private long lastProgressAt;
 
     private ScanEngine(Consumer<byte[], byte[]> consumer, RecordFilter filter, long limit,
-                        boolean follow, boolean keepMatches, MatchHandler onMatch) {
+                        boolean follow, boolean keepMatches, MatchHandler onMatch, Integer partition) {
         this.consumer = consumer;
         this.filter = filter;
         this.limit = limit;
         this.follow = follow;
         this.keepMatches = keepMatches;
         this.onMatch = onMatch;
+        this.partition = partition;
     }
 
     /** Runs one bounded scan of {@code topic} and returns its result. */
@@ -82,7 +85,19 @@ public final class ScanEngine {
     public static ScanResult scan(Consumer<byte[], byte[]> consumer, String topic, StartPosition from,
                                    RecordFilter filter, long limit, boolean follow, boolean keepMatches,
                                    MatchHandler onMatch) throws ScanException {
-        return new ScanEngine(consumer, filter, limit, follow, keepMatches, onMatch).run(topic, from);
+        return scan(consumer, topic, from, filter, limit, follow, keepMatches, onMatch, null);
+    }
+
+    /**
+     * Same as the other {@code scan()} overloads, but restricts the scan to one {@code partition}
+     * (or every partition, if null) -- Kafka only guarantees order within a partition, so this is
+     * how a caller sees a topic's strict per-partition order instead of the default interleaving
+     * across all of them.
+     */
+    public static ScanResult scan(Consumer<byte[], byte[]> consumer, String topic, StartPosition from,
+                                   RecordFilter filter, long limit, boolean follow, boolean keepMatches,
+                                   MatchHandler onMatch, Integer partition) throws ScanException {
+        return new ScanEngine(consumer, filter, limit, follow, keepMatches, onMatch, partition).run(topic, from);
     }
 
     private ScanResult run(String topic, StartPosition from) throws ScanException {
@@ -205,6 +220,9 @@ public final class ScanEngine {
         if (partitionInfos == null || partitionInfos.isEmpty()) {
             throw new ScanException("topic '" + topic + "' does not exist or has no partitions");
         }
+        if (partition != null) {
+            return resolveSinglePartition(topic, partitionInfos);
+        }
 
         List<TopicPartition> resolved = new ArrayList<>();
         for (PartitionInfo pi : partitionInfos) {
@@ -212,6 +230,19 @@ public final class ScanEngine {
         }
 
         return resolved;
+    }
+
+    /** Restricts the scan to the one requested partition, failing clearly if the topic doesn't have it. */
+    private List<TopicPartition> resolveSinglePartition(String topic, List<PartitionInfo> partitionInfos)
+            throws ScanException {
+        for (PartitionInfo pi : partitionInfos) {
+            if (pi.partition() == partition) {
+                return Collections.singletonList(new TopicPartition(topic, partition));
+            }
+        }
+
+        throw new ScanException("topic '" + topic + "' has no partition " + partition
+                + " (it has " + partitionInfos.size() + " partition(s): 0.." + (partitionInfos.size() - 1) + ")");
     }
 
     private List<PartitionInfo> lookUpPartitions(String topic) throws ScanException {
@@ -222,7 +253,7 @@ public final class ScanEngine {
         }
     }
 
-    private void seekToStart(StartPosition from) {
+    private void seekToStart(StartPosition from) throws ScanException {
         switch (from.kind()) {
             case EARLIEST:
                 consumer.seekToBeginning(partitions);
@@ -233,7 +264,25 @@ public final class ScanEngine {
             case TIMESTAMP:
                 seekToTimestamp(from.timestampMs());
                 break;
+            case OFFSET:
+                seekToOffset(from.offset());
+                break;
         }
+    }
+
+    /**
+     * Seeks directly to a known offset -- only meaningful for exactly one partition, since an
+     * offset is partition-relative. Checks the actual invariant (one partition assigned) rather
+     * than "did the caller pass --partition=" as a proxy for it: a topic that genuinely has only
+     * one partition can use this with no --partition= needed at all.
+     */
+    private void seekToOffset(long offset) throws ScanException {
+        if (partitions.size() != 1) {
+            throw new ScanException(
+                    "--from=offset:<n> requires scanning exactly one partition (use --partition=)");
+        }
+
+        consumer.seek(partitions.get(0), offset);
     }
 
     /** Seeks every partition to its first offset at/after {@code timestampMs}, or to its end if none exists. */
