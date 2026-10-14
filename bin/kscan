@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
-# kscan wrapper: resolves a Java 8 runtime and execs the shaded jar, injecting
-# the RPM-installed default config path if the caller didn't supply one.
+# kscan wrapper: resolves a Java 8-or-newer runtime and execs the shaded jar,
+# injecting the RPM-installed default config path if the caller didn't
+# supply one. Java 8 is a floor, not an exact requirement -- the jar is
+# compiled to Java 8 bytecode so it also runs fine on anything newer.
 #
 # Expected install layout (see packaging/kscan.spec):
 #   /opt/kscan/kscan.jar
@@ -54,12 +56,40 @@ else
     fi
 fi
 
-# Defensive version check: accepts old-style "1.8.x" and new-style "8.x"
-# major versions, and skips any "Picked up JAVA_TOOL_OPTIONS" noise line some
-# environments print to stderr before the real "java version ..." line.
+# Version check: Java 8 is the FLOOR, not an exact requirement -- the jar is
+# compiled to Java 8 bytecode specifically so it also runs on anything newer
+# (9, 11, 17, 21, ...), which the JVM has always guaranteed. Only reject
+# something OLDER than 8, or a version string that can't be parsed at all
+# (fail safe rather than silently run under something unverified). Skips any
+# "Picked up JAVA_TOOL_OPTIONS" noise line some environments print to stderr
+# before the real "java version ..." line.
 version_line="$("$java_bin" -version 2>&1 | grep -m1 'version "' || true)"
-if ! printf '%s' "$version_line" | grep -Eq 'version "(1\.8\.|8\.)'; then
-    echo "kscan: $java_bin is not Java 8 (found: ${version_line:-no version output}) -- set KSCAN_JAVA_HOME to a Java 8 install" >&2
+version_string="$(printf '%s' "$version_line" | sed -n 's/.*version "\([^"]*\)".*/\1/p')"
+
+if [ -z "$version_string" ]; then
+    echo "kscan: could not determine the Java version at $java_bin (output: ${version_line:-none}) -- set KSCAN_JAVA_HOME to a Java 8+ install" >&2
+    exit 2
+fi
+
+# Old-style versions (Java 8 and earlier) look like "1.8.0_452" -- the major
+# version is the SECOND component. New-style versions (Java 9+, JEP 223)
+# look like "11.0.2" or just "21" -- the major version is the FIRST component.
+case "$version_string" in
+    1.*)
+        major="$(printf '%s' "$version_string" | cut -d. -f2)"
+        ;;
+    *)
+        major="$(printf '%s' "$version_string" | cut -d. -f1)"
+        ;;
+esac
+
+if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
+    echo "kscan: could not parse the Java major version from '$version_string' at $java_bin -- set KSCAN_JAVA_HOME to a Java 8+ install" >&2
+    exit 2
+fi
+
+if [ "$major" -lt 8 ]; then
+    echo "kscan: $java_bin is Java $major, older than the minimum supported version (8) -- set KSCAN_JAVA_HOME to a Java 8+ install" >&2
     exit 2
 fi
 

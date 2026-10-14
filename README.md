@@ -6,8 +6,6 @@ It scans a topic (bounded scan or live tail) and reports whether records
 exist matching a given key, header, and/or JSON field value. Debugging
 utility, not a library or a service — it runs, prints a result, and exits.
 
-Full requirements/rationale: [`standalone-kafka-scanner-design-prompt.md`](standalone-kafka-scanner-design-prompt.md).
-
 ## Table of Contents
 
 - [Build](#build)
@@ -83,18 +81,21 @@ Installs to:
 ```
 
 No `Requires` on a Java package — target hosts are expected to already
-provision Java 8 out-of-band (confirmed via `rpm -qp --requires` on the
-built RPM). `bin/kscan` is the only thing that cares where Java actually
-lives:
+provision at least Java 8 out-of-band (confirmed via `rpm -qp --requires`
+on the built RPM). `bin/kscan` is the only thing that cares where Java
+actually lives:
 
-- Resolves a Java 8 runtime: `$KSCAN_JAVA_HOME` env var, else the first of
+- Resolves a Java runtime: `$KSCAN_JAVA_HOME` env var, else the first of
   two hardcoded fallback paths that actually has a `bin/java`
   (`/usr/lib/jvm/java-1.8.0-openjdk`, then `/usr/lib/jvm/jre-1.8.0-openjdk`
   — confirmed via podman that a RHEL9/UBI9-style
   `java-1.8.0-openjdk-headless` install only creates the second one).
-  Rejects anything that isn't Java 8 (checked via `java -version`) with
-  exit 2 and a clear message — never silently runs under the wrong major
-  version.
+  **Java 8 is a floor, not an exact requirement** — the jar is compiled to
+  Java 8 bytecode specifically so it also runs on anything newer (9, 11,
+  17, 21, ...), which the JVM has always guaranteed. `bin/kscan` only
+  rejects something *older* than Java 8, or a version string it can't parse
+  at all, with exit 2 and a clear message — never silently runs under an
+  unverified version either way.
 - Injects `--config=/etc/kscan/scanner.properties` only if that file exists
   and the caller didn't already pass their own `--config=` — this is what
   bridges the jar's own "look next to me" default (meant for local dev,
@@ -106,6 +107,7 @@ lives:
 ```bash
 kscan --topic=orders --follow --from=latest
 KSCAN_JAVA_HOME=/opt/vendor-jdk8 kscan --list-topics
+KSCAN_JAVA_HOME=/usr/lib/jvm/java-21-openjdk kscan --list-topics  # newer than 8 works fine too
 ```
 
 ## Usage
@@ -178,8 +180,8 @@ java -jar target/kscan.jar --topic=orders --from=$(date -d '1 hour ago' +%s%3N) 
 
 Every flag is `--key=value`, or a bare `--flag` for documented booleans.
 Space-separated form (`--topic value`) and unknown flags are both hard
-errors (exit 2) — see the design doc's rationale for why this is strict
-rather than permissive.
+errors (exit 2), by design — a silently-ignored typo must never fall back
+to a wrong default and then report a false "not found".
 
 | Flag | Required | Default | Meaning |
 |---|---|---|---|
@@ -500,10 +502,12 @@ broker, the zero-match exit code, stdout/stderr separation, `--list-topics`,
 exit code, both alone and combined with `--limit`), `--output=json`,
 `--output=count`, `--match.field` (Jackson), and `--limit`.
 
-`bin/kscan` and the built RPM are verified the same way: a real Java 8
-runtime running the wrapper through the `/usr/bin/kscan` symlink and the
-RPM's actual extracted contents; the wrapper's Java-8-version rejection and
-missing-Java handling (exit 2); its default-`--config=`-injection logic
+`bin/kscan` and the built RPM are verified the same way: both a real Java 8
+runtime and a newer one (JDK 21) running the wrapper through the
+`/usr/bin/kscan` symlink and the RPM's actual extracted contents, confirming
+Java 8 is accepted as a floor, not an exact requirement; the wrapper's
+too-old-Java rejection, unparseable-version rejection, and missing-Java
+handling (exit 2 in each case); its default-`--config=`-injection logic
 (fires only when the default exists and the caller didn't supply one,
 otherwise falls through to the jar's own default, never overrides an
 explicit `--config=`); and the full RPM lifecycle in a container with a
@@ -542,7 +546,7 @@ src/main/java/kscan/
   filter/                match.key/match.header/match.field filters, ANDed together
   output/                output writers: pretty, json (NDJSON), count
 src/test/java/kscan/     unit tests (MockConsumer-based)
-bin/kscan                wrapper script: resolves Java 8, injects default --config=, execs the jar
+bin/kscan                wrapper script: resolves Java 8+, injects default --config=, execs the jar
 packaging/kscan.spec     RPM spec: installs to /opt/kscan, /etc/kscan, a /usr/bin symlink
 packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
 packaging/scanner.properties   neutral config template the RPM ships (topic/bootstrap.servers commented out)
