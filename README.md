@@ -85,17 +85,24 @@ provision at least Java 8 out-of-band (confirmed via `rpm -qp --requires`
 on the built RPM). `bin/kscan` is the only thing that cares where Java
 actually lives:
 
-- Resolves a Java runtime: `$KSCAN_JAVA_HOME` env var, else the first of
-  two hardcoded fallback paths that actually has a `bin/java`
-  (`/usr/lib/jvm/java-1.8.0-openjdk`, then `/usr/lib/jvm/jre-1.8.0-openjdk`
-  — confirmed via podman that a RHEL9/UBI9-style
-  `java-1.8.0-openjdk-headless` install only creates the second one).
+- Resolves a Java runtime, in order: `$KSCAN_JAVA_HOME` env var, else
+  `/etc/alternatives/java` (the RHEL/Debian alternatives system's symlink
+  to whatever Java the host's package manager/admin has configured as the
+  system default, regardless of vendor/version), else whatever `java`
+  resolves to on `$PATH`, else the first of two hardcoded fallback paths
+  that actually has a `bin/java` (`/usr/lib/jvm/java-1.8.0-openjdk`, then
+  `/usr/lib/jvm/jre-1.8.0-openjdk` — confirmed via podman that a
+  RHEL9/UBI9-style `java-1.8.0-openjdk-headless` install only creates the
+  second one). The hardcoded paths are a last resort now, not the only
+  option — a host whose Java isn't at either of those two exact paths (a
+  different package, a tarball install, a newer-only JDK) is no longer
+  refused as long as `alternatives` or `$PATH` can find it.
   **Java 8 is a floor, not an exact requirement** — the jar is compiled to
   Java 8 bytecode specifically so it also runs on anything newer (9, 11,
   17, 21, ...), which the JVM has always guaranteed. `bin/kscan` only
   rejects something *older* than Java 8, or a version string it can't parse
   at all, with exit 2 and a clear message — never silently runs under an
-  unverified version either way.
+  unverified version either way, no matter which of the above found it.
 - Injects `--config=/etc/kscan/scanner.properties` only if that file exists
   and the caller didn't already pass their own `--config=` — this is what
   bridges the jar's own "look next to me" default (meant for local dev,
@@ -568,6 +575,7 @@ packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 c
 - No real GSSAPI/Kerberos round-trip test (see [SASL / Kerberos](#sasl--kerberos))
   — only the passthrough plumbing is verified, not an actual ticket exchange
   against a KDC.
-- `bin/kscan`'s two Java 8 fallback paths cover RHEL/CentOS 7- and
-  9-style installs; if neither matches the real target host, override with
-  `KSCAN_JAVA_HOME` (check `ls /usr/lib/jvm` on that host).
+- `bin/kscan` now also checks `/etc/alternatives/java` and `$PATH` before
+  falling back to its two hardcoded RHEL/CentOS 7-/9-style paths, so most
+  hosts no longer need an override; if none of those find a usable Java,
+  set `KSCAN_JAVA_HOME` explicitly (check `ls /usr/lib/jvm` on that host).

@@ -4,6 +4,8 @@
 # injecting the RPM-installed default config path if the caller didn't
 # supply one. Java 8 is a floor, not an exact requirement -- the jar is
 # compiled to Java 8 bytecode so it also runs fine on anything newer.
+# Java resolution order: $KSCAN_JAVA_HOME, then /etc/alternatives/java, then
+# $PATH, then two hardcoded Java-8-specific fallback paths as a last resort.
 #
 # Expected install layout (see packaging/kscan.spec):
 #   /opt/kscan/kscan.jar
@@ -12,12 +14,13 @@
 #   /etc/kscan/scanner.properties <- default config (RPM-managed, %config(noreplace))
 set -euo pipefail
 
-# Both layouts have been seen in practice (confirmed in a UBI9 container):
-# RHEL/CentOS 7-era full-JDK packages create the plain "java-1.8.0-openjdk"
-# name, while a RHEL/CentOS 9-era "java-1.8.0-openjdk-headless" install only
-# creates the "jre-1.8.0-openjdk" alternatives symlink -- there is no plain
-# "java-1.8.0-openjdk" at all in that case. Try both; KSCAN_JAVA_HOME always
-# wins over either.
+# Last-resort fallback paths, tried only if /etc/alternatives/java and $PATH
+# (see the resolution order below) both come up empty. Both layouts have been
+# seen in practice (confirmed in a UBI9 container): RHEL/CentOS 7-era
+# full-JDK packages create the plain "java-1.8.0-openjdk" name, while a
+# RHEL/CentOS 9-era "java-1.8.0-openjdk-headless" install only creates the
+# "jre-1.8.0-openjdk" alternatives symlink -- there is no plain
+# "java-1.8.0-openjdk" at all in that case. Try both.
 DEFAULT_JAVA_HOME_CANDIDATES=(
     "/usr/lib/jvm/java-1.8.0-openjdk"
     "/usr/lib/jvm/jre-1.8.0-openjdk"
@@ -44,14 +47,31 @@ if [ -n "${KSCAN_JAVA_HOME:-}" ]; then
         exit 2
     fi
 else
-    for candidate in "${DEFAULT_JAVA_HOME_CANDIDATES[@]}"; do
-        if [ -x "$candidate/bin/java" ]; then
-            java_bin="$candidate/bin/java"
-            break
-        fi
-    done
+    # Resolution order, each tried only if the previous found nothing:
+    #   1. /etc/alternatives/java -- the RHEL/Debian alternatives system's
+    #      symlink to whatever Java the host's package manager/admin has
+    #      configured as the system default, regardless of vendor/version.
+    #   2. whatever "java" resolves to on $PATH -- catches non-RHEL hosts,
+    #      tarball installs, and vendor JDKs that don't register with
+    #      alternatives.
+    #   3. the two hardcoded Java-8-specific paths above, as a last resort.
+    # The version check below still rejects anything found this way that's
+    # older than Java 8 or unparseable -- this only widens WHERE a valid
+    # runtime can be found, not what counts as valid.
+    if [ -x /etc/alternatives/java ]; then
+        java_bin="/etc/alternatives/java"
+    elif command -v java >/dev/null 2>&1; then
+        java_bin="$(command -v java)"
+    else
+        for candidate in "${DEFAULT_JAVA_HOME_CANDIDATES[@]}"; do
+            if [ -x "$candidate/bin/java" ]; then
+                java_bin="$candidate/bin/java"
+                break
+            fi
+        done
+    fi
     if [ -z "$java_bin" ]; then
-        echo "kscan: no usable java found at any of: ${DEFAULT_JAVA_HOME_CANDIDATES[*]} -- set KSCAN_JAVA_HOME to a Java 8 install" >&2
+        echo "kscan: no usable java found (checked /etc/alternatives/java, \$PATH, and: ${DEFAULT_JAVA_HOME_CANDIDATES[*]}) -- set KSCAN_JAVA_HOME to a Java 8+ install" >&2
         exit 2
     fi
 fi
