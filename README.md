@@ -375,6 +375,15 @@ error — this tool is meant to be pointed at real, messy production topics
 that mix formats. `--match.field` is repeatable for multiple fields (all
 must match).
 
+`--match.field` only ever inspects the JSON value's own fields — offset,
+partition, and timestamp are Kafka record metadata, not part of the
+value, so `--match.field=offset=...` will never match. To jump straight
+to one already-known record by offset, use `--partition=<n>
+--from=offset:<n> --limit=1` instead (see
+[Jumping to a known offset](#jumping-to-a-known-offset)) — seeking
+directly there is both simpler and cheaper than a filter that would have
+to scan and discard everything else first.
+
 ```bash
 # key contains "1003"
 java -jar target/kscan.jar --topic=kc-orders --match.key=1003
