@@ -87,7 +87,8 @@ final class ScanRunner {
         System.err.println("kscan: connecting to bootstrap.servers=" + bootstrapServers(kafkaProps)
                 + " topic=" + config.topic() + partitionSuffix(config)
                 + " from=" + config.from() + limitSuffix(config) + " output=" + config.output()
-                + " config=" + configFileSuffix(config));
+                + " config=" + configFileSuffix(config)
+                + "\n");
     }
 
     private static OutputWriter newWriter(OutputMode mode) {
