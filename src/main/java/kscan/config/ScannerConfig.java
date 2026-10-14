@@ -1,5 +1,6 @@
 package kscan.config;
 
+import java.nio.file.Path;
 import java.util.Properties;
 
 /**
@@ -14,6 +15,7 @@ public final class ScannerConfig {
     private final long limit;
     private final Integer partition;
     private final String output;
+    private final Path configFile;
     private final Properties kafkaProperties;
     private final Properties jvmProperties;
     private final MatchConfig match;
@@ -26,6 +28,8 @@ public final class ScannerConfig {
      *                        "not found" hazard class that made earliest the safe --from default.
      * @param output          raw --output value ("pretty", "json", or "count"); parsed/validated by
      *                        {@link kscan.output.OutputMode#parse(String)}, not here.
+     * @param configFile      the config file actually read for this run, or null if none was (no
+     *                        file existed at the resolved, non-explicit default path).
      * @param kafkaProperties kafka.* passthrough properties, already stripped of the "kafka." prefix.
      * @param jvmProperties   jvm.* passthrough properties, already stripped of the "jvm." prefix --
      *                        JVM system properties (e.g. java.security.auth.login.config,
@@ -33,13 +37,14 @@ public final class ScannerConfig {
      *                        Kafka client properties.
      */
     public ScannerConfig(String topic, String from, boolean follow, long limit, Integer partition, String output,
-                          Properties kafkaProperties, Properties jvmProperties, MatchConfig match) {
+                          Path configFile, Properties kafkaProperties, Properties jvmProperties, MatchConfig match) {
         this.topic = topic;
         this.from = from;
         this.follow = follow;
         this.limit = limit;
         this.partition = partition;
         this.output = output;
+        this.configFile = configFile;
         this.kafkaProperties = kafkaProperties;
         this.jvmProperties = jvmProperties;
         this.match = match;
@@ -73,6 +78,11 @@ public final class ScannerConfig {
     /** Raw --output value ("pretty", "json", or "count"); not yet parsed/validated. */
     public String output() {
         return output;
+    }
+
+    /** The config file actually read for this run, or null if none was (no file existed to read). */
+    public Path configFile() {
+        return configFile;
     }
 
     /** kafka.* passthrough properties, already stripped of the "kafka." prefix. */

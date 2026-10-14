@@ -3,6 +3,7 @@ package kscan.config;
 import kscan.cli.CliArgs;
 
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -56,9 +57,11 @@ public final class ConfigBuilder {
 
         MatchConfig match = new MatchConfig(values.matchKey, values.matchHeaderRaw, values.matchFieldRaw,
                 values.matchExact, values.matchCaseSensitive);
+        Path configFileUsed = resolution.path != null && Files.isRegularFile(resolution.path)
+                ? resolution.path : null;
 
         return new ScannerConfig(values.topic, values.from, values.follow, values.limit, values.partition,
-                values.output, values.kafkaProps, values.jvmProps, match);
+                values.output, configFileUsed, values.kafkaProps, values.jvmProps, match);
     }
 
     /** Config-path resolution has its own file&lt;env&lt;CLI precedence, same as every other setting. */

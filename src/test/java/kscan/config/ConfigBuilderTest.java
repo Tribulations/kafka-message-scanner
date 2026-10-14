@@ -162,6 +162,25 @@ class ConfigBuilderTest {
                 () -> ConfigBuilder.build(cli(), configFile, Collections.emptyMap()));
     }
 
+    @Test
+    void configFileReflectsTheActualResolvedPathWhenOneWasUsed(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli(), configFile, Collections.emptyMap());
+
+        assertEquals(configFile, config.configFile());
+    }
+
+    @Test
+    void configFileIsNullWhenNoFileWasActuallyUsed(@TempDir Path dir) throws Exception {
+        Path missing = dir.resolve("does-not-exist.properties");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--topic=t", "--kafka.bootstrap.servers=localhost:9092"), missing, Collections.emptyMap());
+
+        assertEquals(null, config.configFile());
+    }
+
     private static Path writeConfig(Path dir, String contents) throws IOException {
         Path file = dir.resolve("scanner.properties");
         Files.write(file, contents.getBytes(StandardCharsets.UTF_8));

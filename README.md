@@ -119,14 +119,21 @@ java -jar target/kscan.jar --topic=<name> [options]
 ### Quick start
 
 `scanner.properties` at the project root already defaults `topic=kc-hello`,
-`from=earliest`, and `kafka.bootstrap.servers=localhost:9092` for this
-project's own local test broker, and the build copies it next to the jar
-(`target/scanner.properties`) so kscan's install-relative default config
-lookup finds it with **no `--config=` flag needed**:
+`from=earliest`, `limit=50`, and `kafka.bootstrap.servers=localhost:9092`
+for this project's own local test broker, and the build copies it next to
+the jar (`target/scanner.properties`) so kscan's install-relative default
+config lookup finds it with **no `--config=` flag needed**:
 
 ```bash
 java -jar target/kscan.jar
 ```
+
+`limit=50` is there so a zero-flag run never silently reads an entire
+large topic — see [stdout / stderr contract](#stdout--stderr-contract) for
+how kscan always shows you the limit actually in effect, so a capped
+result is never mistaken for a complete one. The *built-in* fallback with
+no config file at all is still `0` (unlimited), unchanged — this default
+only applies when an actual `scanner.properties` is in use.
 
 Any flag still overrides its file default individually — CLI always wins
 (see [Config precedence](#config-precedence)):
@@ -188,7 +195,7 @@ rather than permissive.
 | `--match.field=<spec>` | no | — | Match a JSON field in the record value; repeatable, ANDed together |
 | `--match.exact` | no | off | Require `match.key`/`match.header` to match the full value, not a substring |
 | `--match.case-sensitive` | no | off | Compare `match.key`/`match.header` case-sensitively |
-| `--limit=<n>` | no | `0` (unlimited) | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
+| `--limit=<n>` | no | `0` (unlimited); `50` via the shipped `scanner.properties` | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
 | `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
 | `--partition=<n>` | no | all, interleaved | Restrict the scan to one partition (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
 | `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` (see [Output modes](#output-modes)) |
@@ -433,6 +440,18 @@ java -jar target/kscan.jar --topic=kc-hello --kafka.bootstrap.servers=localhost:
 # -> only the pretty-printed record blocks, nothing else
 ```
 
+The stderr summary lines (both the "connecting to..." one before the scan
+and the "N matched" one after) always spell out everything that shaped the
+result — `topic`, `partition` (if restricted), `from`, `limit` (`unlimited`
+if `0`, never just silently omitted), `output`, and `config` (the resolved
+file path, or `<none>` if no file was actually read) — so "N matched" is
+always attributable to an exact, visible set of settings, never a guess:
+
+```
+kscan: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest limit=50 output=pretty config=/opt/kscan/scanner.properties
+kscan: 50 matched on topic=orders limit=50 bootstrap.servers=localhost:9092
+```
+
 ## Testing
 
 ```bash
@@ -462,8 +481,11 @@ Unit tests use Kafka's `MockConsumer` — no live broker needed. They cover:
   unknown config-file keys and unknown `SCANNER_*` env vars both rejected,
   `--list-topics` bypassing the required-topic check, a negative `--limit`
   rejected, `--max-messages` behaving as a pure alias for `--limit` (and
-  the two together rejected as a conflict), and `--partition` parsing as a
-  CLI-only setting (rejected if given in the config file).
+  the two together rejected as a conflict), `--partition` parsing as a
+  CLI-only setting (rejected if given in the config file), and
+  `ScannerConfig.configFile()` reflecting the actual resolved path when a
+  file was read and `null` when none was (so the stderr summary's `config=`
+  field is never misleading).
 - **Connection safety** (`ConsumerPropertiesFactoryTest`): `kafka.group.id`
   rejected outright; passthrough attempts to weaken
   `enable.auto.commit`/`allow.auto.create.topics`/the deserializers are all

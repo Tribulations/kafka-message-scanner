@@ -85,7 +85,9 @@ final class ScanRunner {
 
     private static void logConnectionSummary(Properties kafkaProps, ScannerConfig config) {
         System.err.println("kscan: connecting to bootstrap.servers=" + bootstrapServers(kafkaProps)
-                + " topic=" + config.topic() + partitionSuffix(config));
+                + " topic=" + config.topic() + partitionSuffix(config)
+                + " from=" + config.from() + limitSuffix(config) + " output=" + config.output()
+                + " config=" + configFileSuffix(config));
     }
 
     private static OutputWriter newWriter(OutputMode mode) {
@@ -134,7 +136,8 @@ final class ScanRunner {
 
     private static void logResultSummary(ScanResult result, Properties kafkaProps, ScannerConfig config) {
         System.err.println("kscan: " + result.matchCount() + " matched on topic=" + config.topic()
-                + partitionSuffix(config) + " bootstrap.servers=" + bootstrapServers(kafkaProps));
+                + partitionSuffix(config) + limitSuffix(config)
+                + " bootstrap.servers=" + bootstrapServers(kafkaProps));
     }
 
     private static String bootstrapServers(Properties kafkaProps) {
@@ -148,5 +151,18 @@ final class ScanRunner {
      */
     private static String partitionSuffix(ScannerConfig config) {
         return config.partition() == null ? "" : " partition=" + config.partition();
+    }
+
+    /**
+     * " limit=N" or " limit=unlimited" -- always shown (unlike partitionSuffix), since a capped
+     * result must never be mistaken for a complete one just because nothing printed to say so.
+     */
+    private static String limitSuffix(ScannerConfig config) {
+        return " limit=" + (config.limit() > 0 ? String.valueOf(config.limit()) : "unlimited");
+    }
+
+    /** The resolved config file path, or "<none>" if no file was actually read for this run. */
+    private static String configFileSuffix(ScannerConfig config) {
+        return config.configFile() == null ? "<none>" : config.configFile().toString();
     }
 }
