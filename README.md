@@ -19,6 +19,7 @@ utility, not a library or a service — it runs, prints a result, and exits.
   - [Restricting to one partition](#restricting-to-one-partition)
   - [Jumping to a known offset](#jumping-to-a-known-offset)
   - [Output modes](#output-modes)
+  - [Distinct values](#distinct-values)
   - [Filters](#filters)
   - [Config file](#config-file)
   - [Config precedence](#config-precedence)
@@ -210,8 +211,9 @@ to a wrong default and then report a false "not found".
 | `--limit=<n>` | no | `0` (unlimited); `50` via the shipped `scanner.properties` | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
 | `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
 | `--partition=<n>` | no | all, interleaved | Restrict the scan to one partition (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
-| `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` (see [Output modes](#output-modes)) |
+| `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` \| `distinct` (see [Output modes](#output-modes)) |
 | `--fields=<list>` | no | all | Restrict a pretty-output block to comma-separated sections: `metadata`, `key`, `headers`, `value` (CLI-only; only valid with `--output=pretty`, see [Output modes](#output-modes)) |
+| `--distinct=<spec>` | only with `--output=distinct` | — | `key` \| `header:<name>` \| `field:<path>` to tally (CLI-only, see [Distinct values](#distinct-values)) |
 | `--help` | no | — | Print usage and exit 0 |
 
 `--kafka.bootstrap.servers=...` is required one way or another (CLI, env,
@@ -311,6 +313,9 @@ summary lines are unaffected):
   (so a live tail shows the count ticking, not silence until you stop it),
   and the final summary line isn't printed a second time if streaming
   already showed that exact total.
+- **`distinct`** — a value/count tally for one field across every matching
+  record, most frequent first (`mobile: 412`, `web: 98`, ...) — see
+  [Distinct values](#distinct-values) below.
 
 ```bash
 java -jar target/kscan.jar --topic=orders --output=json --limit=5 | jq .
@@ -330,6 +335,38 @@ no-op.
 
 ```bash
 java -jar target/kscan.jar --topic=orders --fields=headers,value --limit=5
+```
+
+### Distinct values
+
+`--output=distinct` tallies how many matching records have each distinct
+value for one field, most frequent first — e.g. "I see
+`source=mobile`, what other `source` values exist, and how common is
+each?" without eyeballing every record. It requires a companion
+`--distinct=<spec>` naming what to tally — `key`, `header:<name>`, or
+`field:<dotted.path>` (same path language as `--match.field`) — and the
+two are mutually required: `--output=distinct` without `--distinct=`
+errors, and `--distinct=` without `--output=distinct` errors, same
+"conflict, not silent no-op" rule as `--fields=`. `--distinct=` is
+CLI-only (same reasoning as `--partition`/`--fields`). Combines with
+`--match.*` filters — e.g. "distinct `source` values among records where
+`status=ERROR`" correlates a problem with a specific upstream producer.
+Does **not** support `--follow` yet (exit 2 if combined) — this is meant
+for point-in-time triage before data lands in Kibana/wherever else
+downstream aggregation already happens, not a live dashboard.
+
+A record where the field has no value (a missing header, an absent/missing
+JSON path, or a value that isn't valid JSON for a `field:` spec) is
+bucketed under `<missing>` rather than silently dropped from the tally.
+`--limit` keeps its normal meaning (stop after `n` matches) — a distinct-
+value report only ever reflects what was actually scanned, never implied
+to be the complete set of values that exist; the usual stderr summary
+line already always discloses the effective `limit=`, so a capped report
+is never mistaken for an exhaustive one.
+
+```bash
+java -jar target/kscan.jar --topic=orders --output=distinct --distinct=header:source
+java -jar target/kscan.jar --topic=orders --output=distinct --distinct=field:status --match.field=region=eu
 ```
 
 `--limit=<n>` stops a scan after `n` matches (`0`, the default, means

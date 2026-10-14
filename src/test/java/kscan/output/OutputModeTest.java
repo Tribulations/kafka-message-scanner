@@ -17,6 +17,7 @@ class OutputModeTest {
         assertEquals(OutputMode.PRETTY, OutputMode.parse("PRETTY"));
         assertEquals(OutputMode.JSON, OutputMode.parse("json"));
         assertEquals(OutputMode.COUNT, OutputMode.parse("Count"));
+        assertEquals(OutputMode.DISTINCT, OutputMode.parse("distinct"));
     }
 
     @Test

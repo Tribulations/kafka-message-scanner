@@ -16,6 +16,7 @@ public final class ScannerConfig {
     private final Integer partition;
     private final String output;
     private final String fields;
+    private final String distinct;
     private final Path configFile;
     private final Properties kafkaProperties;
     private final Properties jvmProperties;
@@ -33,6 +34,10 @@ public final class ScannerConfig {
      *                        section); parsed/validated by {@link kscan.output.OutputField#parse(String)},
      *                        not here. CLI-only (no file/env form), same reasoning as partition: a
      *                        persisted default would silently hide sections on every future run.
+     * @param distinct        raw --distinct value (e.g. "header:source"), or null if unset; parsed/
+     *                        validated by {@link kscan.output.DistinctSpec#parse(String)}, not here.
+     *                        CLI-only (no file/env form) and only valid together with
+     *                        {@code output=distinct} -- same reasoning as fields/partition.
      * @param configFile      the config file actually read for this run, or null if none was (no
      *                        file existed at the resolved, non-explicit default path).
      * @param kafkaProperties kafka.* passthrough properties, already stripped of the "kafka." prefix.
@@ -42,8 +47,8 @@ public final class ScannerConfig {
      *                        Kafka client properties.
      */
     public ScannerConfig(String topic, String from, boolean follow, long limit, Integer partition, String output,
-                          String fields, Path configFile, Properties kafkaProperties, Properties jvmProperties,
-                          MatchConfig match) {
+                          String fields, String distinct, Path configFile, Properties kafkaProperties,
+                          Properties jvmProperties, MatchConfig match) {
         this.topic = topic;
         this.from = from;
         this.follow = follow;
@@ -51,6 +56,7 @@ public final class ScannerConfig {
         this.partition = partition;
         this.output = output;
         this.fields = fields;
+        this.distinct = distinct;
         this.configFile = configFile;
         this.kafkaProperties = kafkaProperties;
         this.jvmProperties = jvmProperties;
@@ -90,6 +96,11 @@ public final class ScannerConfig {
     /** Raw --fields value, or null if unset (print every section); not yet parsed/validated. */
     public String fields() {
         return fields;
+    }
+
+    /** Raw --distinct value, or null if unset; not yet parsed/validated. */
+    public String distinct() {
+        return distinct;
     }
 
     /** The config file actually read for this run, or null if none was (no file existed to read). */

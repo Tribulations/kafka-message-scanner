@@ -211,6 +211,72 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void distinctIsCliOnlyAndNullByDefault(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig noDistinct = ConfigBuilder.build(cli(), configFile, Collections.emptyMap());
+        assertEquals(null, noDistinct.distinct());
+
+        ScannerConfig withDistinct = ConfigBuilder.build(
+                cli("--output=distinct", "--distinct=header:source"), configFile, Collections.emptyMap());
+        assertEquals("header:source", withDistinct.distinct());
+    }
+
+    @Test
+    void distinctInTheFileIsRejectedAsAnUnknownKey(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir,
+                "topic=t\nkafka.bootstrap.servers=localhost:9092\ndistinct=key\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli(), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void outputDistinctRequiresTheDistinctFlag(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--output=distinct"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void distinctFlagRequiresOutputDistinct(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--distinct=key"), configFile, Collections.emptyMap()));
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--distinct=key", "--output=json"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void distinctConflictsWithListTopics(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--list-topics", "--output=distinct", "--distinct=key"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void distinctConflictsWithFollow(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--follow", "--output=distinct", "--distinct=key"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void distinctIsFineWithMatchFilters(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--output=distinct", "--distinct=header:source", "--match.field=status=ERROR"),
+                configFile, Collections.emptyMap());
+
+        assertEquals("header:source", config.distinct());
+    }
+
+    @Test
     void configFileReflectsTheActualResolvedPathWhenOneWasUsed(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -267,7 +333,7 @@ class ConfigBuilderTest {
 
     private static Set<String> knownValueKeys() {
         return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
-                "match.key", "match.header", "match.field");
+                "distinct", "match.key", "match.header", "match.field");
     }
 
     private static Set<String> knownBooleanKeys() {

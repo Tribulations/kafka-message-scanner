@@ -7,6 +7,7 @@ import kscan.config.ScannerConfig;
 import kscan.filter.RecordFilter;
 import kscan.filter.RecordFilterFactory;
 import kscan.kafka.ConsumerPropertiesFactory;
+import kscan.output.DistinctSpec;
 import kscan.output.OutputField;
 import kscan.output.OutputMode;
 import kscan.scan.StartPosition;
@@ -83,6 +84,20 @@ final class StartupPipeline {
 
         try {
             return OutputField.parse(config.fields());
+        } catch (IllegalArgumentException e) {
+            throw new ExitSignal(2, e.getMessage());
+        }
+    }
+
+    /** Null if --distinct= wasn't given -- {@link ConfigBuilder} already rejected it alongside
+     *  anything other than --output=distinct, so this is the only case left. */
+    static DistinctSpec parseDistinctSpec(ScannerConfig config) throws ExitSignal {
+        if (config.distinct() == null) {
+            return null;
+        }
+
+        try {
+            return DistinctSpec.parse(config.distinct());
         } catch (IllegalArgumentException e) {
             throw new ExitSignal(2, e.getMessage());
         }

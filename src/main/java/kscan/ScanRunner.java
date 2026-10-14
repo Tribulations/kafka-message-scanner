@@ -3,6 +3,8 @@ package kscan;
 import kscan.config.ScannerConfig;
 import kscan.filter.RecordFilter;
 import kscan.output.CountOutputWriter;
+import kscan.output.DistinctOutputWriter;
+import kscan.output.DistinctSpec;
 import kscan.output.JsonOutputWriter;
 import kscan.output.OutputField;
 import kscan.output.OutputMode;
@@ -13,7 +15,6 @@ import kscan.scan.ScanEngine;
 import kscan.scan.ScanException;
 import kscan.scan.ScanResult;
 import kscan.scan.StartPosition;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 
 import java.util.Properties;
@@ -38,8 +39,9 @@ final class ScanRunner {
      * instead of nothing but Kafka's own WARN noise.
      */
     static int listTopics(Properties kafkaProps, ScannerConfig config) throws ExitSignal {
-        System.err.println("kscan: connecting to bootstrap.servers=" + bootstrapServers(kafkaProps)
-                + " config=" + configFileSuffix(config) + " (list-topics)");
+        RunSummary summary = new RunSummary(kafkaProps, config);
+        System.err.println("kscan: connecting to bootstrap.servers=" + summary.bootstrapServers()
+                + " config=" + summary.configFileSuffix() + " (list-topics)");
 
         try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(kafkaProps)) {
             Set<String> topics = new TreeSet<>(consumer.listTopics().keySet());
@@ -47,7 +49,7 @@ final class ScanRunner {
                 System.out.println(topic);
             }
             System.err.println("kscan: " + topics.size() + " topic(s) on bootstrap.servers="
-                    + bootstrapServers(kafkaProps));
+                    + summary.bootstrapServers());
 
             return 0;
         } catch (Exception e) {
@@ -56,9 +58,10 @@ final class ScanRunner {
     }
 
     /** Opens the consumer, runs the scan, writes the result, and maps the outcome to an exit code. */
-    static int executeScan(Properties kafkaProps, ScannerConfig config, StartPosition from,
-                            RecordFilter filter, OutputMode mode, Set<OutputField> fields) throws ExitSignal {
-        logConnectionSummary(kafkaProps, config);
+    static int executeScan(Properties kafkaProps, ScannerConfig config, StartPosition from, RecordFilter filter,
+                            OutputMode mode, Set<OutputField> fields, DistinctSpec distinct) throws ExitSignal {
+        RunSummary summary = new RunSummary(kafkaProps, config);
+        System.err.println(summary.connectionLine());
 
         try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(kafkaProps)) {
             ShutdownCoordinator shutdown = new ShutdownCoordinator(consumer);
@@ -67,10 +70,10 @@ final class ScanRunner {
             int exitCode = 2;
 
             try {
-                OutputWriter writer = newWriter(mode, fields);
+                OutputWriter writer = newWriter(mode, fields, distinct);
                 ScanResult result = runScan(consumer, config, from, filter, mode, writer);
                 writeResult(result, writer);
-                logResultSummary(result, kafkaProps, config);
+                System.err.println(summary.resultLine(result.matchCount()));
 
                 exitCode = result.matchCount() > 0 ? 0 : 1;
 
@@ -89,20 +92,14 @@ final class ScanRunner {
         }
     }
 
-    private static void logConnectionSummary(Properties kafkaProps, ScannerConfig config) {
-        System.err.println("kscan: connecting to bootstrap.servers=" + bootstrapServers(kafkaProps)
-                + " topic=" + config.topic() + partitionSuffix(config)
-                + " from=" + config.from() + limitSuffix(config) + " output=" + config.output()
-                + fieldsSuffix(config) + " config=" + configFileSuffix(config)
-                + "\n");
-    }
-
-    private static OutputWriter newWriter(OutputMode mode, Set<OutputField> fields) {
+    private static OutputWriter newWriter(OutputMode mode, Set<OutputField> fields, DistinctSpec distinct) {
         switch (mode) {
             case JSON:
                 return new JsonOutputWriter();
             case COUNT:
                 return new CountOutputWriter();
+            case DISTINCT:
+                return new DistinctOutputWriter(distinct);
             default:
                 return new PrettyOutputWriter(fields);
         }
@@ -139,45 +136,5 @@ final class ScanRunner {
 
     private static void writeResult(ScanResult result, OutputWriter writer) {
         writer.write(result, System.out);
-    }
-
-    private static void logResultSummary(ScanResult result, Properties kafkaProps, ScannerConfig config) {
-        System.err.println("\nkscan: " + result.matchCount() + " matched on topic=" + config.topic()
-                + partitionSuffix(config) + limitSuffix(config)
-                + " bootstrap.servers=" + bootstrapServers(kafkaProps));
-    }
-
-    private static String bootstrapServers(Properties kafkaProps) {
-        return kafkaProps.getProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG);
-    }
-
-    /**
-     * " partition=N" when a scan is restricted to one partition, else empty -- without this, a
-     * --partition=3 zero-match result reads identically to a whole-topic zero-match result on
-     * stderr, which breaks "0 matched must always be attributable to exactly what was checked."
-     */
-    private static String partitionSuffix(ScannerConfig config) {
-        return config.partition() == null ? "" : " partition=" + config.partition();
-    }
-
-    /**
-     * " limit=N" or " limit=unlimited" -- always shown (unlike partitionSuffix), since a capped
-     * result must never be mistaken for a complete one just because nothing printed to say so.
-     */
-    private static String limitSuffix(ScannerConfig config) {
-        return " limit=" + (config.limit() > 0 ? String.valueOf(config.limit()) : "unlimited");
-    }
-
-    /** The resolved config file path, or "<none>" if no file was actually read for this run. */
-    private static String configFileSuffix(ScannerConfig config) {
-        return config.configFile() == null ? "<none>" : config.configFile().toString();
-    }
-
-    /**
-     * " fields=<raw>" when --fields= restricted which sections print, else empty -- so a run
-     * that's only showing a subset of each record is never mistaken for one showing everything.
-     */
-    private static String fieldsSuffix(ScannerConfig config) {
-        return config.fields() == null ? "" : " fields=" + config.fields();
     }
 }

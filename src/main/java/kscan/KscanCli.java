@@ -77,17 +77,24 @@ final class KscanCli {
             + "                        Kafka only guarantees order within a partition, so use this to\n"
             + "                        see a topic's strict per-partition message order\n"
             + "                        e.g. --partition=0\n"
-            + "  --output=<mode>       pretty | json | count  (default: pretty)\n"
+            + "  --output=<mode>       pretty | json | count | distinct  (default: pretty)\n"
             + "                        pretty: human-readable block per record\n"
             + "                        json: one JSON object per record, one line each (NDJSON)\n"
             + "                        count: only the integer match count, nothing else on stdout\n"
             + "                        (with --follow, the running total prints as it changes)\n"
+            + "                        distinct: value/count tally for one field, see --distinct=\n"
+            + "                        below -- requires it, and doesn't support --follow (yet)\n"
             + "                        e.g. --output=json   (pipe to jq)   or   --output=count\n"
             + "  --fields=<list>       restrict a pretty-output block to just these comma-separated\n"
             + "                        sections: metadata (topic/partition/offset/timestamp), key,\n"
             + "                        headers, value -- only valid with --output=pretty (the default);\n"
             + "                        errors with --output=json/count or --list-topics\n"
             + "                        e.g. --fields=headers,value   (skip metadata/key when skimming)\n"
+            + "  --distinct=<spec>     what to tally for --output=distinct: key | header:<name> |\n"
+            + "                        field:<path> (same dotted path as --match.field); required\n"
+            + "                        together with --output=distinct, combinable with --match.*\n"
+            + "                        e.g. --output=distinct --distinct=header:source\n"
+            + "                             --output=distinct --distinct=field:status --match.field=region=eu\n"
             + "  --help                show this message\n"
             + "\n"
             + "Exit codes: 0 = at least one match found, 1 = ran cleanly with zero matches, 2 = error.\n";
@@ -106,7 +113,7 @@ final class KscanCli {
 
     private static Set<String> knownValueKeys() {
         return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
-                "match.key", "match.header", "match.field");
+                "distinct", "match.key", "match.header", "match.field");
     }
 
     private static Set<String> knownBooleanKeys() {

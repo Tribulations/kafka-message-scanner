@@ -4,15 +4,11 @@ import kscan.filter.RecordFilter;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
-import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,7 +19,10 @@ import java.util.Map;
  * {@code MockConsumer} can drive this in unit tests with no live broker.
  *
  * One instance represents one bounded scan run: it owns the mutable state
- * (matches found so far, stall tracking) for that run only.
+ * (matches found so far, stall tracking) for that run only -- focused purely on the poll loop and
+ * its termination conditions. The two pieces that only need their own inputs, not that ongoing
+ * mutable state, are pulled out as pure static helpers: {@link PartitionResolver} (which
+ * partitions to assign to) and {@link ScanSeeker} (where to start reading from).
  */
 public final class ScanEngine {
 
@@ -101,10 +100,10 @@ public final class ScanEngine {
     }
 
     private ScanResult run(String topic, StartPosition from) throws ScanException {
-        partitions = resolvePartitions(topic);
+        partitions = PartitionResolver.resolve(consumer, topic, partition);
         consumer.assign(partitions);
         snapshotEnd = consumer.endOffsets(partitions);
-        seekToStart(from);
+        ScanSeeker.seekToStart(consumer, partitions, from);
 
         lastProgressAt = System.currentTimeMillis();
         while (!isDone()) {
@@ -212,99 +211,6 @@ public final class ScanEngine {
         if (System.currentTimeMillis() - lastProgressAt > STALL_TIMEOUT_MS) {
             throw new ScanException("no progress from broker for " + (STALL_TIMEOUT_MS / 1000)
                     + "s -- aborting rather than reporting a possibly-false result");
-        }
-    }
-
-    private List<TopicPartition> resolvePartitions(String topic) throws ScanException {
-        List<PartitionInfo> partitionInfos = lookUpPartitions(topic);
-        if (partitionInfos == null || partitionInfos.isEmpty()) {
-            throw new ScanException("topic '" + topic + "' does not exist or has no partitions");
-        }
-        if (partition != null) {
-            return resolveSinglePartition(topic, partitionInfos);
-        }
-
-        List<TopicPartition> resolved = new ArrayList<>();
-        for (PartitionInfo pi : partitionInfos) {
-            resolved.add(new TopicPartition(pi.topic(), pi.partition()));
-        }
-
-        return resolved;
-    }
-
-    /** Restricts the scan to the one requested partition, failing clearly if the topic doesn't have it. */
-    private List<TopicPartition> resolveSinglePartition(String topic, List<PartitionInfo> partitionInfos)
-            throws ScanException {
-        for (PartitionInfo pi : partitionInfos) {
-            if (pi.partition() == partition) {
-                return Collections.singletonList(new TopicPartition(topic, partition));
-            }
-        }
-
-        throw new ScanException("topic '" + topic + "' has no partition " + partition
-                + " (it has " + partitionInfos.size() + " partition(s): 0.." + (partitionInfos.size() - 1) + ")");
-    }
-
-    private List<PartitionInfo> lookUpPartitions(String topic) throws ScanException {
-        try {
-            return consumer.partitionsFor(topic);
-        } catch (Exception e) {
-            throw new ScanException("failed to look up topic '" + topic + "': " + e.getMessage(), e);
-        }
-    }
-
-    private void seekToStart(StartPosition from) throws ScanException {
-        switch (from.kind()) {
-            case EARLIEST:
-                consumer.seekToBeginning(partitions);
-                break;
-            case LATEST:
-                consumer.seekToEnd(partitions);
-                break;
-            case TIMESTAMP:
-                seekToTimestamp(from.timestampMs());
-                break;
-            case OFFSET:
-                seekToOffset(from.offset());
-                break;
-        }
-    }
-
-    /**
-     * Seeks directly to a known offset -- only meaningful for exactly one partition, since an
-     * offset is partition-relative. Checks the actual invariant (one partition assigned) rather
-     * than "did the caller pass --partition=" as a proxy for it: a topic that genuinely has only
-     * one partition can use this with no --partition= needed at all.
-     */
-    private void seekToOffset(long offset) throws ScanException {
-        if (partitions.size() != 1) {
-            throw new ScanException(
-                    "--from=offset:<n> requires scanning exactly one partition (use --partition=)");
-        }
-
-        consumer.seek(partitions.get(0), offset);
-    }
-
-    /** Seeks every partition to its first offset at/after {@code timestampMs}, or to its end if none exists. */
-    private void seekToTimestamp(long timestampMs) {
-        Map<TopicPartition, Long> query = new HashMap<>();
-        for (TopicPartition tp : partitions) {
-            query.put(tp, timestampMs);
-        }
-
-        Map<TopicPartition, OffsetAndTimestamp> found = consumer.offsetsForTimes(query);
-        List<TopicPartition> noRecordAtOrAfter = new ArrayList<>();
-        for (TopicPartition tp : partitions) {
-            OffsetAndTimestamp oat = found.get(tp);
-            if (oat == null) {
-                noRecordAtOrAfter.add(tp); // no record at/after this time -- go to end, not an undefined position
-            } else {
-                consumer.seek(tp, oat.offset());
-            }
-        }
-
-        if (!noRecordAtOrAfter.isEmpty()) {
-            consumer.seekToEnd(noRecordAtOrAfter);
         }
     }
 

@@ -3,6 +3,7 @@ package kscan;
 import kscan.cli.CliArgs;
 import kscan.config.ScannerConfig;
 import kscan.filter.RecordFilter;
+import kscan.output.DistinctSpec;
 import kscan.output.OutputField;
 import kscan.output.OutputMode;
 import kscan.scan.StartPosition;
@@ -38,8 +39,9 @@ final class KscanApp {
             RecordFilter filter = StartupPipeline.buildFilter(config);
             OutputMode mode = StartupPipeline.parseOutputMode(config);
             Set<OutputField> fields = StartupPipeline.parseOutputFields(config);
+            DistinctSpec distinct = StartupPipeline.parseDistinctSpec(config);
 
-            return ScanRunner.executeScan(kafkaProps, config, from, filter, mode, fields);
+            return ScanRunner.executeScan(kafkaProps, config, from, filter, mode, fields, distinct);
         } catch (ExitSignal e) {
             reportExit(e);
 

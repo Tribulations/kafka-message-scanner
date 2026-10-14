@@ -1,6 +1,7 @@
 package kscan.kafka;
 
 import kscan.config.ConfigLoadException;
+import kscan.util.DidYouMean;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 
@@ -75,39 +76,9 @@ public final class ConsumerPropertiesFactory {
 
     /** "" if nothing in {@code validNames} is close enough to {@code key} to be worth suggesting. */
     private static String suggestionFor(String key, Set<String> validNames) {
-        String closest = null;
-        int closestDistance = Integer.MAX_VALUE;
+        String closest = DidYouMean.suggest(key, validNames, SUGGESTION_MAX_DISTANCE);
 
-        for (String candidate : validNames) {
-            int distance = levenshteinDistance(key, candidate);
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closest = candidate;
-            }
-        }
-
-        return closest != null && closestDistance <= SUGGESTION_MAX_DISTANCE
-                ? " -- did you mean --kafka." + closest + "=... ?" : "";
-    }
-
-    /** Classic edit-distance DP; the property-name sets here are tiny, so no need to optimize. */
-    private static int levenshteinDistance(String a, String b) {
-        int[][] dist = new int[a.length() + 1][b.length() + 1];
-        for (int i = 0; i <= a.length(); i++) {
-            dist[i][0] = i;
-        }
-        for (int j = 0; j <= b.length(); j++) {
-            dist[0][j] = j;
-        }
-
-        for (int i = 1; i <= a.length(); i++) {
-            for (int j = 1; j <= b.length(); j++) {
-                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
-                dist[i][j] = Math.min(Math.min(dist[i - 1][j] + 1, dist[i][j - 1] + 1), dist[i - 1][j - 1] + cost);
-            }
-        }
-
-        return dist[a.length()][b.length()];
+        return closest == null ? "" : " -- did you mean --kafka." + closest + "=... ?";
     }
 
     private static void rejectGroupId(Properties kafkaPassthrough) throws ConfigLoadException {

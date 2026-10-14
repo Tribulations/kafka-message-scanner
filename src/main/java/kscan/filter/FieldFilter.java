@@ -3,6 +3,7 @@ package kscan.filter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kscan.config.ConfigLoadException;
+import kscan.util.JsonPaths;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.io.IOException;
@@ -70,7 +71,7 @@ public final class FieldFilter implements RecordFilter {
     }
 
     private boolean matchesSpec(JsonNode root, Spec spec) {
-        JsonNode node = navigate(root, spec.path);
+        JsonNode node = JsonPaths.navigate(root, spec.path);
 
         switch (spec.operator) {
             case EQUALS:
@@ -83,19 +84,6 @@ public final class FieldFilter implements RecordFilter {
             default:
                 throw new AssertionError("unhandled operator: " + spec.operator);
         }
-    }
-
-    private static JsonNode navigate(JsonNode root, String dottedPath) {
-        JsonNode current = root;
-        for (String segment : dottedPath.split("\\.")) {
-            if (current == null) {
-                return null;
-            }
-
-            current = current.get(segment);
-        }
-
-        return current;
     }
 
     private enum Operator { EQUALS, NOT_EQUALS, REGEX }
