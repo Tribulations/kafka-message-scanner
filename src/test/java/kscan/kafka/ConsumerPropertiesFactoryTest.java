@@ -27,6 +27,41 @@ class ConsumerPropertiesFactoryTest {
     }
 
     @Test
+    void rejectsAnUnknownKafkaPropertyWithASuggestion() {
+        Properties passthrough = minimal();
+        passthrough.setProperty("bootstrap-server", "localhost:9096");
+
+        ConfigLoadException e = assertThrows(ConfigLoadException.class,
+                () -> ConsumerPropertiesFactory.build(passthrough));
+        assertTrue(e.getMessage().contains("bootstrap-server"));
+        assertTrue(e.getMessage().contains("did you mean --kafka.bootstrap.servers=... ?"));
+    }
+
+    @Test
+    void rejectsAnUnknownKafkaPropertyWithNoCloseMatchAndNoSuggestion() {
+        Properties passthrough = minimal();
+        passthrough.setProperty("completely.made.up.nonsense.property", "x");
+
+        ConfigLoadException e = assertThrows(ConfigLoadException.class,
+                () -> ConsumerPropertiesFactory.build(passthrough));
+        assertTrue(e.getMessage().contains("completely.made.up.nonsense.property"));
+        assertFalse(e.getMessage().contains("did you mean"));
+    }
+
+    @Test
+    void acceptsEveryKafkaPropertyThisToolDocumentsOrUsesElsewhere() throws ConfigLoadException {
+        Properties passthrough = minimal();
+        passthrough.setProperty("security.protocol", "SASL_PLAINTEXT");
+        passthrough.setProperty("sasl.mechanism", "PLAIN");
+        passthrough.setProperty("sasl.jaas.config", "org.apache.kafka.common.security.plain.PlainLoginModule required;");
+        passthrough.setProperty("ssl.truststore.location", "/some/path");
+        passthrough.setProperty(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, "3000");
+
+        Properties built = ConsumerPropertiesFactory.build(passthrough);
+        assertEquals("SASL_PLAINTEXT", built.getProperty("security.protocol"));
+    }
+
+    @Test
     void rejectsAnExplicitGroupId() {
         Properties passthrough = minimal();
         passthrough.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "some-group");

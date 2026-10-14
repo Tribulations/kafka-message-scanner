@@ -170,10 +170,13 @@ here if you want to pipe the sample to `jq` to look at field names.
 
 To instead see what *recent* messages look like rather than the oldest
 ones, no extra flag is needed — `--from=` already accepts an epoch-ms
-timestamp:
+timestamp, or a human-readable date/time:
 
 ```bash
 java -jar target/kscan.jar --topic=orders --from=$(date -d '1 hour ago' +%s%3N) --limit=50
+
+# equivalent, using a human-readable date/time instead of epoch-ms
+java -jar target/kscan.jar --topic=orders --from="$(date -d '1 hour ago' '+%Y-%m-%d %H:%M:%S')" --limit=50
 ```
 
 ### Flags
@@ -186,11 +189,11 @@ to a wrong default and then report a false "not found".
 | Flag | Required | Default | Meaning |
 |---|---|---|---|
 | `--topic=<name>` | yes (or via config/env) | — | Topic to scan |
-| `--from=<pos>` | no | `earliest` | `earliest` \| `latest` \| `<epoch-ms>` \| `offset:<n>` (see [Jumping to a known offset](#jumping-to-a-known-offset)) |
+| `--from=<pos>` | no | `earliest` | `earliest` \| `latest` \| `<epoch-ms>` \| a human-readable date/time (e.g. `2026-10-01`, `"2026-10-01 08:25:45"`, `2026-10-01T08:25:45Z`) \| `offset:<n>` (see [Jumping to a known offset](#jumping-to-a-known-offset)) |
 | `--follow` | no | off | Keep polling for new records after reaching the current end (`tail -f` style); stops on Ctrl-C/SIGTERM |
 | `--config=<path>` | no | next to the jar | Path to a `scanner.properties`-style file |
 | `--list-topics` | no | off | List topic names on the cluster and exit; `--topic=` not required |
-| `--kafka.<prop>=<val>` | no | — | Arbitrary Kafka client property passthrough, repeatable for different keys |
+| `--kafka.<prop>=<val>` | no | — | Kafka client property passthrough, repeatable for different keys; `<prop>` must be a real consumer client property name (see below) |
 | `--jvm.<prop>=<val>` | no | — | Arbitrary JVM system property, applied via `System.setProperty` before the consumer is built (see [SASL / Kerberos](#sasl--kerberos)) |
 | `--match.key=<val>` | no | — | Match records whose key contains `<val>` (see [Filters](#filters)) |
 | `--match.header=<n>=<v>` | no | — | Match records with header `<n>` containing `<v>`; repeatable, ANDed together |
@@ -204,7 +207,13 @@ to a wrong default and then report a false "not found".
 | `--help` | no | — | Print usage and exit 0 |
 
 `--kafka.bootstrap.servers=...` is required one way or another (CLI, env,
-or config file) — there's no safe default for "which cluster".
+or config file) — there's no safe default for "which cluster". Every
+`--kafka.<prop>=` key is checked against Kafka's own consumer client
+property names at startup — an unrecognized one (e.g. a typo like
+`bootstrap-server` instead of `bootstrap.servers`) is a hard error, with a
+"did you mean...?" suggestion when one is close, rather than silently
+having no effect while the real property keeps whatever value a config
+file or default already gave it.
 
 ### Listing topics
 
@@ -212,7 +221,8 @@ or config file) — there's no safe default for "which cluster".
 sorted topic names to stdout (one per line), and exits 0 — `--topic=` is not
 required (and is ignored if given alongside it). Same fail-fast behavior as a
 scan: an unreachable broker still exits 2 within the short timeout rather
-than hanging.
+than hanging, and prints a `kscan: connecting to bootstrap.servers=...`
+line up front first, so it's clear what it was even trying to reach.
 
 ```bash
 java -jar target/kscan.jar --list-topics

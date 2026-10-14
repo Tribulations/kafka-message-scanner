@@ -32,9 +32,14 @@ final class ScanRunner {
     /**
      * Opens a consumer just to call {@code listTopics()}, prints the sorted topic names to
      * stdout (one per line), and exits 0 -- a read-only "what's even on this cluster" check that
-     * needs no --topic= and never touches offsets or messages.
+     * needs no --topic= and never touches offsets or messages. Prints a connecting summary first
+     * (same as a scan) so a down/unreachable broker shows where kscan was even trying to connect,
+     * instead of nothing but Kafka's own WARN noise.
      */
-    static int listTopics(Properties kafkaProps) throws ExitSignal {
+    static int listTopics(Properties kafkaProps, ScannerConfig config) throws ExitSignal {
+        System.err.println("kscan: connecting to bootstrap.servers=" + bootstrapServers(kafkaProps)
+                + " config=" + configFileSuffix(config) + " (list-topics)");
+
         try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(kafkaProps)) {
             Set<String> topics = new TreeSet<>(consumer.listTopics().keySet());
             for (String topic : topics) {

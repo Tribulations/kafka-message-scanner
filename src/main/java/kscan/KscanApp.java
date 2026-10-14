@@ -29,7 +29,7 @@ final class KscanApp {
             Properties kafkaProps = StartupPipeline.buildKafkaProperties(config);
 
             if (cli.hasFlag("list-topics")) {
-                return ScanRunner.listTopics(kafkaProps);
+                return ScanRunner.listTopics(kafkaProps, config);
             }
 
             StartPosition from = StartupPipeline.parseStartPosition(config);
