@@ -8,7 +8,7 @@ import kscan.util.JsonPaths;
 import java.io.IOException;
 
 /**
- * What {@code --distinct=} tallies: the record key, a named header, or a JSON field in the
+ * What {@code --distinct=} counts: the record key, a named header, or a JSON field in the
  * record value (same dotted-path language {@code --match.field} uses). {@code field:}/{@code
  * header:} prefixes mirror the existing {@code offset:} prefix convention in {@link
  * kscan.scan.StartPosition}.

@@ -75,7 +75,7 @@ final class OutputModeConflicts {
      * time -- a bounded scan's output is produced entirely inside each OutputWriter's own write(),
      * with no per-record moment outside it to pace, so a delay there would silently have zero
      * effect. Also conflicts with --list-topics (no records are ever printed there) and, in
-     * principle, --output=distinct (its writeRecord never prints anything, only tallies -- see
+     * principle, --output=distinct (its writeRecord never prints anything, only counts -- see
      * DistinctOutputWriter) -- though that last check is currently unreachable in practice, since
      * requireDistinctAndOutputTogether() above already unconditionally rejects --follow with
      * --output=distinct regardless of --delay. Kept anyway: if distinct ever gains --follow support

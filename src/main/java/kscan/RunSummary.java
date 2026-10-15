@@ -80,7 +80,7 @@ final class RunSummary {
     }
 
     /**
-     * " distinct=<raw>" when --output=distinct is tallying one field, else empty -- so a
+     * " distinct=<raw>" when --output=distinct is counting one field, else empty -- so a
      * value/count report is never mistaken for a normal per-record listing.
      */
     private String distinctSuffix() {

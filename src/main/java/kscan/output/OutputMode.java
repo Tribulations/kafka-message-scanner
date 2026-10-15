@@ -2,7 +2,7 @@ package kscan.output;
 
 /**
  * Which output mode to use: pretty (human-readable), json (NDJSON), count (match count only), or
- * distinct (a value/count tally for one field, see {@link DistinctSpec}).
+ * distinct (a value/count report for one field, see {@link DistinctSpec}).
  */
 public enum OutputMode {
     PRETTY, JSON, COUNT, DISTINCT;

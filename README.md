@@ -274,7 +274,7 @@ to a wrong default and then report a false "not found".
 | `--partition=<n>` | no | all, interleaved | Restrict the scan to one partition (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
 | `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` \| `distinct` (see [Output modes](#output-modes)) |
 | `--fields=<list>` | no | all | Restrict a pretty-output block to comma-separated sections: `metadata`, `key`, `headers`, `value` (CLI-only; only valid with `--output=pretty`, see [Output modes](#output-modes)) |
-| `--distinct=<spec>` | only with `--output=distinct` | — | `key` \| `header:<name>` \| `field:<path>` to tally (CLI-only, see [Distinct values](#distinct-values)) |
+| `--distinct=<spec>` | only with `--output=distinct` | — | `key` \| `header:<name>` \| `field:<path>` to count (CLI-only, see [Distinct values](#distinct-values)) |
 | `--help` | no | — | Print usage and exit 0 |
 
 `--kafka.bootstrap.servers=...` is required one way or another (CLI, env,
@@ -392,7 +392,7 @@ summary lines are unaffected):
   (so a live tail shows the count ticking, not silence until you stop it),
   and the final summary line isn't printed a second time if streaming
   already showed that exact total.
-- **`distinct`** — a value/count tally for one field across every matching
+- **`distinct`** — a value/count report for one field across every matching
   record, most frequent first (`mobile: 412`, `web: 98`, ...) — see
   [Distinct values](#distinct-values) below.
 
@@ -418,11 +418,11 @@ java -jar target/kscan.jar --topic=orders --fields=headers,value --limit=5
 
 ### Distinct values
 
-`--output=distinct` tallies how many matching records have each distinct
+`--output=distinct` counts how many matching records have each distinct
 value for one field, most frequent first — e.g. "I see
 `source=mobile`, what other `source` values exist, and how common is
 each?" without eyeballing every record. It requires a companion
-`--distinct=<spec>` naming what to tally — `key`, `header:<name>`, or
+`--distinct=<spec>` naming what to count — `key`, `header:<name>`, or
 `field:<dotted.path>` (same path language as `--match.field`) — and the
 two are mutually required: `--output=distinct` without `--distinct=`
 errors, and `--distinct=` without `--output=distinct` errors, same
@@ -436,7 +436,7 @@ downstream aggregation already happens, not a live dashboard.
 
 A record where the field has no value (a missing header, an absent/missing
 JSON path, or a value that isn't valid JSON for a `field:` spec) is
-bucketed under `<missing>` rather than silently dropped from the tally.
+bucketed under `<missing>` rather than silently dropped from the count.
 `--limit` keeps its normal meaning (stop after `n` matches) — a distinct-
 value report only ever reflects what was actually scanned, never implied
 to be the complete set of values that exist; the usual stderr summary

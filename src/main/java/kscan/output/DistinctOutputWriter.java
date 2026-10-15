@@ -10,13 +10,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Tallies how many matching records have each distinct value for a given {@link DistinctSpec}
+ * Counts how many matching records have each distinct value for a given {@link DistinctSpec}
  * (key, a header, or a JSON field), then prints "value: count" one per line, most frequent first
  * -- a quick "what values actually exist" report, not a per-record dump. A record where the spec
  * found no value (missing header, missing/absent JSON path, non-JSON value) is bucketed under
- * "&lt;missing&gt;" rather than silently dropped from the tally.
+ * "&lt;missing&gt;" rather than silently dropped from the count.
  *
- * A high-cardinality field (a UUID, a timestamp) could otherwise grow this tally's own memory
+ * A high-cardinality field (a UUID, a timestamp) could otherwise grow this count's own memory
  * footprint unboundedly, independent of how reasonable --limit is -- once {@link #MAX_DISTINCT_VALUES}
  * distinct values have been seen, every further *new* value is folded into a single overflow
  * bucket instead of growing the map forever, so memory stays bounded regardless of the data.
