@@ -56,7 +56,7 @@ final class OutputModeConflicts {
                     "--output=distinct requires --distinct=<key|header:<name>|field:<path>>");
         }
         if (hasDistinctFlag && !isDistinctOutput) {
-            throw new ConfigLoadException("--distinct=... has no effect unless --output=distinct");
+            throw new ConfigLoadException("--distinct=... has no effect unless --output=distinct is also used");
         }
         if (!hasDistinctFlag) {
             return;
