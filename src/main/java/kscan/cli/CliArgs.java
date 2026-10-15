@@ -1,5 +1,7 @@
 package kscan.cli;
 
+import kscan.util.DidYouMean;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -24,6 +26,12 @@ public final class CliArgs {
      * or {@code --jvm.java.security.krb5.conf=/etc/krb5.conf}.
      */
     private static final String JVM_PREFIX = "jvm.";
+    /**
+     * Tighter than {@code ConsumerPropertiesFactory}'s kafka.* suggestion threshold (4): kscan's
+     * own flag names are a small set of mostly short strings, where a loose edit-distance cap risks
+     * a wrong/confusing guess rather than a helpful one.
+     */
+    private static final int SUGGESTION_MAX_DISTANCE = 2;
 
     private final Map<String, List<String>> values = new LinkedHashMap<>();
     private final Set<String> flags = new LinkedHashSet<>();
@@ -45,9 +53,10 @@ public final class CliArgs {
                                  Set<String> knownBooleanKeys, Set<String> repeatableKeys)
             throws CliParseException {
         CliArgs result = new CliArgs();
+        Set<String> allKnownKeys = union(knownValueKeys, knownBooleanKeys);
 
         for (String arg : argv) {
-            result.parseOne(arg, knownValueKeys, knownBooleanKeys, repeatableKeys);
+            result.parseOne(arg, knownValueKeys, knownBooleanKeys, repeatableKeys, allKnownKeys);
         }
 
         return result;
@@ -55,43 +64,65 @@ public final class CliArgs {
 
     /** Parses a single {@code --key=value} or bare {@code --flag} argument and records it. */
     private void parseOne(String arg, Set<String> knownValueKeys, Set<String> knownBooleanKeys,
-                           Set<String> repeatableKeys) throws CliParseException {
-        String body = requireDoubleDashPrefix(arg);
+                           Set<String> repeatableKeys, Set<String> allKnownKeys) throws CliParseException {
+        String body = requireDoubleDashPrefix(arg, allKnownKeys);
         int eq = body.indexOf('=');
 
         if (eq < 0) {
-            addBooleanFlag(body, knownBooleanKeys);
+            addBooleanFlag(body, knownValueKeys, knownBooleanKeys, allKnownKeys);
             return;
         }
 
         String key = body.substring(0, eq);
         String value = body.substring(eq + 1);
-        addValueFlag(key, value, knownValueKeys, repeatableKeys);
+        addValueFlag(key, value, knownValueKeys, knownBooleanKeys, repeatableKeys, allKnownKeys);
     }
 
-    /** Strips the required "--" prefix, or fails with a message naming the unsupported space-separated form. */
-    private static String requireDoubleDashPrefix(String arg) throws CliParseException {
+    /**
+     * Strips the required "--" prefix, or fails with a message naming the unsupported
+     * space-separated form. kscan has no positional arguments -- every token is always meant to be
+     * a flag -- so a missing "--" is treated as a presumed flag attempt: the part before the first
+     * "=" (or the whole token, if there's no "=") is tried as a candidate key, and an exact or close
+     * match (e.g. "match.field=foo=bar" missing its leading "--") reconstructs the full corrected
+     * flag as a suggestion.
+     */
+    private static String requireDoubleDashPrefix(String arg, Set<String> allKnownKeys) throws CliParseException {
         if (!arg.startsWith("--")) {
+            int eq = arg.indexOf('=');
+            String candidateKey = eq < 0 ? arg : arg.substring(0, eq);
+            String value = eq < 0 ? null : arg.substring(eq + 1);
+
             throw new CliParseException(
                     "unrecognized argument '" + arg + "': every flag must be --key=value "
-                            + "or a bare --flag (space-separated form is not supported)");
+                            + "or a bare --flag (space-separated form is not supported)"
+                            + suggestSuffix(candidateKey, value, allKnownKeys));
         }
 
         return arg.substring(2);
     }
 
-    private void addBooleanFlag(String name, Set<String> knownBooleanKeys) throws CliParseException {
+    private void addBooleanFlag(String name, Set<String> knownValueKeys, Set<String> knownBooleanKeys,
+                                 Set<String> allKnownKeys) throws CliParseException {
         if (!knownBooleanKeys.contains(name)) {
-            throw new CliParseException("unknown flag '--" + name + "'");
+            if (knownValueKeys.contains(name)) {
+                throw new CliParseException("'--" + name + "' requires a value, e.g. --" + name + "=<value>");
+            }
+
+            throw new CliParseException("unknown flag '--" + name + "'" + suggestSuffix(name, null, allKnownKeys));
         }
 
         flags.add(name);
     }
 
-    private void addValueFlag(String key, String value, Set<String> knownValueKeys, Set<String> repeatableKeys)
-            throws CliParseException {
+    private void addValueFlag(String key, String value, Set<String> knownValueKeys, Set<String> knownBooleanKeys,
+                               Set<String> repeatableKeys, Set<String> allKnownKeys) throws CliParseException {
         if (!isPassthroughKey(key) && !knownValueKeys.contains(key)) {
-            throw new CliParseException("unknown flag '--" + key + "'");
+            if (knownBooleanKeys.contains(key)) {
+                throw new CliParseException(
+                        "'--" + key + "' is a bare flag and does not take a value -- use --" + key);
+            }
+
+            throw new CliParseException("unknown flag '--" + key + "'" + suggestSuffix(key, value, allKnownKeys));
         }
 
         List<String> existing = values.computeIfAbsent(key, k -> new ArrayList<>());
@@ -100,6 +131,23 @@ public final class CliArgs {
         }
 
         existing.add(value);
+    }
+
+    /** "" if nothing in {@code knownKeys} is close enough to {@code candidateKey} to be worth suggesting. */
+    private static String suggestSuffix(String candidateKey, String value, Set<String> knownKeys) {
+        String closest = DidYouMean.suggest(candidateKey, knownKeys, SUGGESTION_MAX_DISTANCE);
+        if (closest == null) {
+            return "";
+        }
+
+        return " -- did you mean --" + closest + (value == null ? "" : "=" + value) + "?";
+    }
+
+    private static Set<String> union(Set<String> a, Set<String> b) {
+        Set<String> result = new LinkedHashSet<>(a);
+        result.addAll(b);
+
+        return result;
     }
 
     /** True for any {@code kafka.<name>} or {@code jvm.<name>} passthrough key -- always accepted. */

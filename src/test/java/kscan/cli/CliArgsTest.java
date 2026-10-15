@@ -33,20 +33,57 @@ class CliArgsTest {
     void rejectsAnUnknownFlag() {
         CliParseException e = assertThrows(CliParseException.class, () -> parse("--toppic=orders"));
         assertTrue(e.getMessage().contains("toppic"));
+        assertTrue(e.getMessage().contains("did you mean --topic=orders?"));
+    }
+
+    @Test
+    void suggestsTheClosestKnownBooleanFlagForATypo() {
+        CliParseException e = assertThrows(CliParseException.class, () -> parse("--followw"));
+        assertTrue(e.getMessage().contains("did you mean --follow?"));
+    }
+
+    @Test
+    void anUnrelatedUnknownFlagGetsNoSuggestion() {
+        CliParseException e = assertThrows(CliParseException.class, () -> parse("--xyz=1"));
+        assertFalse(e.getMessage().contains("did you mean"));
+    }
+
+    @Test
+    void aKnownValueKeyGivenBareIsToldItNeedsAValueRatherThanCalledUnknown() {
+        // "--topic" alone (no "=") -- distinguished from a genuinely unknown flag, since "topic" IS
+        // recognized, just missing its value.
+        CliParseException e = assertThrows(CliParseException.class, () -> parse("--topic"));
+        assertTrue(e.getMessage().contains("requires a value"));
     }
 
     @Test
     void rejectsTheSpaceSeparatedForm() {
-        // "--topic" alone (no "=") is indistinguishable from an attempted bare boolean flag, so this
-        // fails as "unknown flag '--topic'" without ever looking at the second token -- still a hard
-        // rejection either way, which is what actually matters here.
+        // "--topic" alone (no "=") is indistinguishable from an attempted bare boolean flag -- still
+        // a hard rejection either way (now with the more specific "requires a value" message, see
+        // above), without ever looking at the second token.
         assertThrows(CliParseException.class, () -> parse("--topic", "orders"));
+    }
+
+    @Test
+    void aKnownBooleanKeyGivenWithAValueIsToldItDoesNotTakeOne() {
+        CliParseException e = assertThrows(CliParseException.class, () -> parse("--follow=true"));
+        assertTrue(e.getMessage().contains("does not take a value"));
     }
 
     @Test
     void rejectsAnArgumentWithNoDoubleDashPrefix() {
         CliParseException e = assertThrows(CliParseException.class, () -> parse("orders"));
         assertTrue(e.getMessage().toLowerCase().contains("space-separated"));
+        assertFalse(e.getMessage().contains("did you mean"));
+    }
+
+    @Test
+    void suggestsAddingTheMissingDoubleDashWhenTheKeyExactlyMatches() {
+        // the user's own reported case: a flag-shaped token missing its leading "--" -- reconstructs
+        // the exact corrected flag (key AND value) as the suggestion, not just the bare key name.
+        CliParseException e = assertThrows(CliParseException.class,
+                () -> parse("match.header=foo=bar"));
+        assertTrue(e.getMessage().contains("did you mean --match.header=foo=bar?"));
     }
 
     @Test
