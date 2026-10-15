@@ -54,8 +54,7 @@ final class KscanApp {
     private static void reportExit(ExitSignal e) {
         System.err.println("error: " + e.getMessage());
         if (e.showUsage) {
-            System.err.println();
-            System.err.print(KscanCli.USAGE);
+            System.err.println("Run 'kscan --help' for usage.");
         }
     }
 }
