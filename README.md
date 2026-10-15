@@ -257,7 +257,12 @@ never match anything.
 Every flag is `--key=value`, or a bare `--flag` for documented booleans.
 Space-separated form (`--topic value`) and unknown flags are both hard
 errors (exit 2), by design — a silently-ignored typo must never fall back
-to a wrong default and then report a false "not found".
+to a wrong default and then report a false "not found". An unrecognized or
+malformed flag gets a "did you mean...?" suggestion when a known one is
+close — including a flag-shaped argument missing its leading `--`, e.g.
+`match.field=foo=bar` suggests `--match.field=foo=bar`, and a known flag
+used in the wrong form (a bare `--topic` with no value, or `--follow=true`)
+gets a specific message instead of a generic "unknown flag".
 
 | Flag | Required | Default | Meaning |
 |---|---|---|---|
@@ -442,7 +447,12 @@ downstream aggregation already happens, not a live dashboard.
 
 A record where the field has no value (a missing header, an absent/missing
 JSON path, or a value that isn't valid JSON for a `field:` spec) is
-bucketed under `<missing>` rather than silently dropped from the count.
+bucketed under `<missing>` rather than silently dropped from the count. A
+high-cardinality field (a UUID, a timestamp) can't grow this report's
+memory use without bound: once 10,000 distinct values have been seen,
+every further *new* value folds into a single
+`<other: too many distinct values, truncated>` bucket instead — a repeat of
+an already-tracked value still counts normally either way.
 `--limit` keeps its normal meaning (stop after `n` matches) — a distinct-
 value report only ever reflects what was actually scanned, never implied
 to be the complete set of values that exist; the usual stderr summary
@@ -547,10 +557,11 @@ SCANNER_TOPIC=kc-orders java -jar target/kscan.jar --kafka.bootstrap.servers=loc
 
 `kafka.*` and `jvm.*` passthrough both have an env equivalent:
 `SCANNER_KAFKA_<NAME>` and `SCANNER_JVM_<NAME>` (uppercase, dots become
-underscores — e.g. `SCANNER_KAFKA_BOOTSTRAP_SERVERS`). `match.key`,
-`match.exact`, `match.case-sensitive`, `follow`, `limit`, and `output` do too
-(`SCANNER_MATCH_KEY`, `SCANNER_MATCH_EXACT`, `SCANNER_MATCH_CASE_SENSITIVE`,
-`SCANNER_FOLLOW`, `SCANNER_LIMIT`, `SCANNER_OUTPUT`).
+underscores — e.g. `SCANNER_KAFKA_BOOTSTRAP_SERVERS`). `from`, `until`,
+`match.key`, `match.exact`, `match.case-sensitive`, `follow`, `limit`, and
+`output` do too (`SCANNER_FROM`, `SCANNER_UNTIL`, `SCANNER_MATCH_KEY`,
+`SCANNER_MATCH_EXACT`, `SCANNER_MATCH_CASE_SENSITIVE`, `SCANNER_FOLLOW`,
+`SCANNER_LIMIT`, `SCANNER_OUTPUT`).
 
 `match.header`/`match.field` are list-valued and have **no env-var form at
 all** — only the CLI's repeatable flags or the file's numbered keys
@@ -697,7 +708,14 @@ end-to-end scan, an edited `/etc/kafka-message-scanner/scanner.properties` survi
 `rpm -Uvh` upgrade untouched (the new default appears alongside as
 `.rpmnew` once the template actually changes), and a clean `rpm -e` leaving
 no stray files or directories. `rpm -qlpv`/`rpm -qp --requires` confirm the
-file list, permissions, and that no `java` dependency is declared.
+file list, permissions, and that no `java` dependency is declared;
+`rpm -qa`/`dnf search` confirm the package is actually findable by
+`kafka`, the point of its descriptive name, while `kscan` stays the
+installed command. The offline/air-gapped build path
+(`packaging/vendor-dependencies.sh` + `build-rpm.sh`'s auto-detected
+offline mode) was verified by physically hiding this machine's real
+`~/.m2/repository` and confirming the RPM still builds successfully from
+only the vendored dependency bundle.
 
 A bytecode check (`packaging/check-bytecode.py`, run by `build-rpm.sh`)
 fails the build if any class in the shaded jar (outside
@@ -718,6 +736,8 @@ src/main/java/kscan/
   KscanCli.java             kscan's flag schema, --help text, and CLI parsing wiring
   StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/filter/etc.
   ScanRunner.java           opens the consumer, runs the scan or --list-topics, reports the result
+  RunSummary.java           builds the stderr connecting/result summary lines ScanRunner prints
+  ScanRiskWarnings.java     builds the stderr WARNING lines for costly scan shapes (see below)
   ShutdownCoordinator.java  Ctrl-C/SIGTERM handling so --follow exits 0/1/2, never 143
   ExitSignal.java           shared exit-code-carrying exception used across the above
   cli/                   strict CLI argument parsing
@@ -731,6 +751,7 @@ bin/kscan                wrapper script: resolves Java 8+, injects default --con
 packaging/kafka-message-scanner.spec   RPM spec (package name is descriptive; installed command stays "kscan"):
                          installs to /opt/kafka-message-scanner, /etc/kafka-message-scanner, a /usr/bin symlink
 packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
+packaging/vendor-dependencies.sh   vendors Maven dependencies for an offline/air-gapped RPM build
 packaging/scanner.properties   neutral config template the RPM ships (topic/bootstrap.servers commented out)
 packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 class in the shaded jar
 ```
