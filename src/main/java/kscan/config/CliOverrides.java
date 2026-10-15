@@ -15,6 +15,9 @@ final class CliOverrides {
         if (cli.getSingle("from") != null) {
             values.from = cli.getSingle("from");
         }
+        if (cli.getSingle("until") != null) {
+            values.until = cli.getSingle("until");
+        }
         if (cli.hasFlag("follow")) {
             values.follow = true;
         }

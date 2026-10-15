@@ -36,12 +36,14 @@ final class KscanApp {
             }
 
             StartPosition from = StartupPipeline.parseStartPosition(config);
+            Long until = StartupPipeline.parseUntilEpochMillis(config);
+            StartupPipeline.requireUntilAfterFrom(from, until);
             RecordFilter filter = StartupPipeline.buildFilter(config);
             OutputMode mode = StartupPipeline.parseOutputMode(config);
             Set<OutputField> fields = StartupPipeline.parseOutputFields(config);
             DistinctSpec distinct = StartupPipeline.parseDistinctSpec(config);
 
-            return ScanRunner.executeScan(kafkaProps, config, from, filter, mode, fields, distinct);
+            return ScanRunner.executeScan(kafkaProps, config, from, until, filter, mode, fields, distinct);
         } catch (ExitSignal e) {
             reportExit(e);
 

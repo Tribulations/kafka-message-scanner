@@ -6,6 +6,8 @@ import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.header.internals.RecordHeaders;
+import org.apache.kafka.common.record.TimestampType;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -14,6 +16,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -247,8 +250,64 @@ class ScanEngineTest {
         assertTrue(e.getMessage().contains("partition 5"));
     }
 
+    @Test
+    void untilBoundSkipsRecordsTimestampedAfterItButStillCountsTheRest() throws Exception {
+        MockConsumer<byte[], byte[]> consumer = newAssignedConsumer(3L);
+        consumer.schedulePollTask(() -> {
+            consumer.addRecord(recordAt(0, 1_000L, "a"));
+            consumer.addRecord(recordAt(1, 2_000L, "b"));
+            consumer.addRecord(recordAt(2, 3_000L, "c"));
+        });
+
+        ScanResult result = ScanEngine.scan(consumer, TOPIC, StartPosition.parse("earliest"),
+                RecordFilter.matchAll(), 0, false, true, null, null, 2_000L);
+
+        assertEquals(2, result.matchCount());
+        assertEquals("a", result.matches().get(0).value());
+        assertEquals("b", result.matches().get(1).value());
+    }
+
+    @Test
+    void untilBoundDoesNotStopThePartitionEarlyEvenWithAnOutOfOrderTimestamp() throws Exception {
+        // a record past `until` appears before a record still within bounds -- Kafka doesn't
+        // guarantee non-decreasing timestamps within a partition, so the engine must not treat
+        // "saw one past until" as "done with this partition."
+        MockConsumer<byte[], byte[]> consumer = newAssignedConsumer(3L);
+        consumer.schedulePollTask(() -> {
+            consumer.addRecord(recordAt(0, 5_000L, "late"));
+            consumer.addRecord(recordAt(1, 1_000L, "a"));
+            consumer.addRecord(recordAt(2, 2_000L, "b"));
+        });
+
+        ScanResult result = ScanEngine.scan(consumer, TOPIC, StartPosition.parse("earliest"),
+                RecordFilter.matchAll(), 0, false, true, null, null, 2_000L);
+
+        assertEquals(2, result.matchCount());
+        assertEquals("a", result.matches().get(0).value());
+        assertEquals("b", result.matches().get(1).value());
+    }
+
+    @Test
+    void noUntilBoundMatchesEveryRecordRegardlessOfTimestamp() throws Exception {
+        MockConsumer<byte[], byte[]> consumer = newAssignedConsumer(2L);
+        consumer.schedulePollTask(() -> {
+            consumer.addRecord(recordAt(0, Long.MAX_VALUE, "a"));
+            consumer.addRecord(recordAt(1, 1_000L, "b"));
+        });
+
+        ScanResult result = ScanEngine.scan(consumer, TOPIC, StartPosition.parse("earliest"),
+                RecordFilter.matchAll(), 0, false, true, null, null, null);
+
+        assertEquals(2, result.matchCount());
+    }
+
     private static ConsumerRecord<byte[], byte[]> record(long offset, String value) {
         return new ConsumerRecord<>(TOPIC, 0, offset, null, value.getBytes());
+    }
+
+    private static ConsumerRecord<byte[], byte[]> recordAt(long offset, long timestamp, String value) {
+        return new ConsumerRecord<>(TOPIC, 0, offset, timestamp, TimestampType.CREATE_TIME,
+                0, 0, null, value.getBytes(), new RecordHeaders(), Optional.empty());
     }
 
     private static ConsumerRecord<byte[], byte[]> record(int partition, long offset, String value) {

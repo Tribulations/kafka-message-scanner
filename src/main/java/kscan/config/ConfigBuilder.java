@@ -48,9 +48,22 @@ public final class ConfigBuilder {
         Path configFileUsed = resolution.path != null && Files.isRegularFile(resolution.path)
                 ? resolution.path : null;
 
-        return new ScannerConfig(values.topic, values.from, values.follow, values.limit, values.partition,
-                values.output, values.fields, values.distinct, values.delay, configFileUsed, values.kafkaProps,
-                values.jvmProps, match);
+        return ScannerConfig.builder()
+                .topic(values.topic)
+                .from(values.from)
+                .until(values.until)
+                .follow(values.follow)
+                .limit(values.limit)
+                .partition(values.partition)
+                .output(values.output)
+                .fields(values.fields)
+                .distinct(values.distinct)
+                .delay(values.delay)
+                .configFile(configFileUsed)
+                .kafkaProperties(values.kafkaProps)
+                .jvmProperties(values.jvmProps)
+                .match(match)
+                .build();
     }
 
     /** Config-path resolution has its own file&lt;env&lt;CLI precedence, same as every other setting. */
@@ -95,6 +108,7 @@ public final class ConfigBuilder {
     static final class MutableValues {
         String topic;
         String from;
+        String until;
         boolean follow;
         long limit;
         Integer partition;

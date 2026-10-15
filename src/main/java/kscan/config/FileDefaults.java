@@ -11,7 +11,7 @@ import java.util.Set;
 final class FileDefaults {
 
     private static final Set<String> KNOWN_SCALAR_KEYS =
-            setOf("topic", "from", "follow", "limit", "output",
+            setOf("topic", "from", "until", "follow", "limit", "output",
                     "match.key", "match.exact", "match.case-sensitive");
     private static final Set<String> KNOWN_PREFIXES =
             setOf("kafka.", "jvm.", "match.header.", "match.field.");
@@ -40,6 +40,7 @@ final class FileDefaults {
         ConfigBuilder.MutableValues values = new ConfigBuilder.MutableValues();
         values.topic = fileProps.getProperty("topic");
         values.from = fileProps.getProperty("from", DEFAULT_FROM);
+        values.until = fileProps.getProperty("until");
         values.follow = StrictParsers.parseBoolean("follow", fileProps.getProperty("follow"), false);
         values.limit = StrictParsers.parseLong("limit", fileProps.getProperty("limit"), DEFAULT_LIMIT);
         values.output = fileProps.getProperty("output", DEFAULT_OUTPUT);

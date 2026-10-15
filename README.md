@@ -9,6 +9,7 @@ utility, not a library or a service — it runs, prints a result, and exits.
 ## Table of Contents
 
 - [Build](#build)
+  - [Offline / air-gapped build](#offline--air-gapped-build)
 - [Installing via RPM](#installing-via-rpm)
 - [Usage](#usage)
   - [Quick start](#quick-start)
@@ -64,6 +65,41 @@ mvn package -Drevision="$(cat VERSION)"
 
 `packaging/build-rpm.sh` always does this for you — see
 [Installing via RPM](#installing-via-rpm).
+
+### Offline / air-gapped build
+
+If the machine that will run `packaging/build-rpm.sh` has no internet
+access (`mvn`/`rpmbuild` themselves are assumed already installed there —
+this only solves "Maven can't download *dependency* jars"), vendor the
+dependencies once on a networked machine and carry them over:
+
+```bash
+# on a networked machine, in this repo:
+./packaging/vendor-dependencies.sh
+# -> target/offline-repo.tar.gz  (self-contained: only what this project needs,
+#    not your real ~/.m2/repository)
+```
+
+Transfer two things to the air-gapped host, however you already move files
+there (internal mirror, USB, approved transfer process — not something
+kscan itself handles): the project repo itself, and
+`target/offline-repo.tar.gz`. On the air-gapped host, extract the tarball
+so its contents land at `target/offline-repo` inside the repo, then run
+`build-rpm.sh` exactly as normal:
+
+```bash
+# on the air-gapped host, inside the repo:
+tar -xzf offline-repo.tar.gz -C target
+./packaging/build-rpm.sh
+# auto-detects target/offline-repo and builds against it instead of
+# reaching out to the network -- no separate flag needed
+```
+
+Re-run `vendor-dependencies.sh` and re-transfer the tarball whenever
+`pom.xml`'s dependencies change. Note that `target/offline-repo` lives
+under `target/` like every other build output — `mvn clean`/`make clean`
+removes it along with everything else, so extract the tarball again (no
+need to re-vendor) if that happens before `build-rpm.sh` runs.
 
 ## Installing via RPM
 
@@ -190,6 +226,26 @@ java -jar target/kscan.jar --topic=orders --from=$(date -d '1 hour ago' +%s%3N) 
 java -jar target/kscan.jar --topic=orders --from="$(date -d '1 hour ago' '+%Y-%m-%d %H:%M:%S')" --limit=50
 ```
 
+`--until=` bounds the other end of a time range the same way, accepting the
+same epoch-ms/date-time forms (but never `earliest`/`latest`/`offset:<n>` —
+those have no instant of their own to compare against):
+
+```bash
+# everything from 9am to 10am on a given day
+java -jar target/kscan.jar --topic=orders \
+    --from="2026-10-15 09:00:00" --until="2026-10-15 10:00:00"
+```
+
+A record is skipped once its timestamp is past `--until=`, but the scan
+still reads to each partition's normal end — it never stops a partition
+early just because one record happened to be past the bound. Kafka doesn't
+guarantee non-decreasing timestamps within a partition (log compaction,
+producer retries, clock skew across multiple producers), so treating "one
+record past `--until=`" as "every later record is too" could silently
+truncate a scan and report a false "done". An `--until=` earlier than the
+resolved `--from=` instant is rejected at startup (exit 2) — that range can
+never match anything.
+
 ### Flags
 
 Every flag is `--key=value`, or a bare `--flag` for documented booleans.
@@ -201,6 +257,7 @@ to a wrong default and then report a false "not found".
 |---|---|---|---|
 | `--topic=<name>` | yes (or via config/env) | — | Topic to scan |
 | `--from=<pos>` | no | `earliest` | `earliest` \| `latest` \| `<epoch-ms>` \| a human-readable date/time (e.g. `2026-10-01`, `"2026-10-01 08:25:45"`, `2026-10-01T08:25:45Z`) \| `offset:<n>` (see [Jumping to a known offset](#jumping-to-a-known-offset)) |
+| `--until=<pos>` | no | none (no upper bound) | Stop matching records timestamped after this instant — same epoch-ms/date-time forms as `--from=`, but never `earliest`/`latest`/`offset:<n>`; errors if before `--from=` |
 | `--follow` | no | off | Keep polling for new records after reaching the current end (`tail -f` style); stops on Ctrl-C/SIGTERM |
 | `--delay=<ms>` | only with `--follow` | — | Pause this many ms after printing each live match (CLI-only; see [Following a topic](#following-a-topic-tail--f)) |
 | `--config=<path>` | no | next to the jar | Path to a `scanner.properties`-style file |
@@ -584,11 +641,15 @@ Unit tests use Kafka's `MockConsumer` — no live broker needed. They cover:
   restricting the scan to one partition (and a nonexistent partition
   rejected), `offset:<n>` parsing and seeking (resuming from exactly that
   offset, and rejected when more than one partition is assigned),
-  matching/not-matching for each filter type, the missing-header/missing-path
-  "never matches" rule, non-JSON values being skipped rather than erroring,
-  malformed filter specs rejected at parse time, and null key/value
-  serializing as JSON `null` rather than a placeholder string.
-- **CLI/config merge** (`CliArgsTest`, `ConfigBuilderTest`): the strict
+  `--until=` skipping records timestamped past the bound without ever
+  stopping a partition early (including an out-of-order timestamp arriving
+  before an in-bound one), matching/not-matching for each filter type, the
+  missing-header/missing-path "never matches" rule, non-JSON values being
+  skipped rather than erroring, malformed filter specs rejected at parse
+  time, and null key/value serializing as JSON `null` rather than a
+  placeholder string.
+- **CLI/config merge** (`CliArgsTest`, `ConfigBuilderTest`,
+  `StartupPipelineTest`): the strict
   `--key=value`-or-bare-flag parsing contract (unknown flag, the
   space-separated form, a non-repeatable flag given twice all rejected),
   the file &lt; `SCANNER_*` env &lt; CLI precedence for scalars and lists,
@@ -599,7 +660,9 @@ Unit tests use Kafka's `MockConsumer` — no live broker needed. They cover:
   CLI-only setting (rejected if given in the config file), and
   `ScannerConfig.configFile()` reflecting the actual resolved path when a
   file was read and `null` when none was (so the stderr summary's `config=`
-  field is never misleading).
+  field is never misleading); `--until=` resolving before `--from=` rejected
+  at startup, and `--until=` combined with `earliest`/`latest`/`offset:<n>`
+  (which have no comparable instant) left unvalidated rather than erroring.
 - **Connection safety** (`ConsumerPropertiesFactoryTest`): `kafka.group.id`
   rejected outright; passthrough attempts to weaken
   `enable.auto.commit`/`allow.auto.create.topics`/the deserializers are all

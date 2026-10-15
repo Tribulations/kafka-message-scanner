@@ -14,7 +14,20 @@ cd "$repo_root"
 version="$(cat VERSION)"
 echo "kscan: building version $version"
 
-mvn -q package -Drevision="$version"
+# If packaging/vendor-dependencies.sh was already run (on a networked machine) and its
+# target/offline-repo.tar.gz was extracted here, build against that vendored repo instead of
+# reaching out to the network -- this is the only thing an air-gapped build host needs, since
+# mvn/rpmbuild themselves are assumed already installed there (see README's "Offline / air-gapped
+# build" section). Auto-detected rather than a separate flag: the vendored repo's mere presence is
+# itself the clearest signal of intent, and this keeps the common networked-machine path unchanged.
+mvn_args=(-q package -Drevision="$version")
+offline_repo="target/offline-repo"
+if [ -d "$offline_repo" ]; then
+    echo "kscan: vendored dependency repo found at $offline_repo -- building offline"
+    mvn_args+=(-o "-Dmaven.repo.local=$offline_repo")
+fi
+
+mvn "${mvn_args[@]}"
 
 # --release 8 at compile time only covers code compiled in THIS build; it
 # can't catch a bundled dependency class that itself targets newer

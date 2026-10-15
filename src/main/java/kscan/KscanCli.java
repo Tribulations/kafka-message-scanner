@@ -33,6 +33,10 @@ final class KscanCli {
             + "                             --from=2026-10-01  or  --from=\"2026-10-01 08:25:45\"\n"
             + "                             --from=2026-10-01T08:25:45Z\n"
             + "                             --partition=2 --from=offset:3801 --limit=1  (jump to one record)\n"
+            + "  --until=<pos>         stop matching records timestamped after this instant (same\n"
+            + "                        epoch-ms/date-time forms as --from=, but never earliest/latest/\n"
+            + "                        offset:<n>); unset = no upper bound; errors if before --from=\n"
+            + "                        e.g. --from=\"2026-10-15 09:00:00\" --until=\"2026-10-15 10:00:00\"\n"
             + "  --follow              keep polling for new records after reaching the current end\n"
             + "                        (tail -f style); stops on Ctrl-C/SIGTERM\n"
             + "                        e.g. --follow --from=latest   (only see records from now on)\n"
@@ -116,7 +120,7 @@ final class KscanCli {
     }
 
     private static Set<String> knownValueKeys() {
-        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
+        return setOf("config", "topic", "from", "until", "limit", "max-messages", "partition", "output", "fields",
                 "distinct", "delay", "match.key", "match.header", "match.field");
     }
 

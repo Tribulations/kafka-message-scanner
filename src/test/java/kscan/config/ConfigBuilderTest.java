@@ -40,6 +40,31 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void untilIsNullByDefault(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli(), configFile, Collections.emptyMap());
+        assertEquals(null, config.until());
+    }
+
+    @Test
+    void untilMergesAcrossFileEnvAndCli(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir,
+                "topic=t\nkafka.bootstrap.servers=localhost:9092\nuntil=from-file\n");
+
+        ScannerConfig fileOnly = ConfigBuilder.build(cli(), configFile, Collections.emptyMap());
+        assertEquals("from-file", fileOnly.until());
+
+        ScannerConfig envOverride = ConfigBuilder.build(cli(),
+                configFile, env("SCANNER_UNTIL", "from-env"));
+        assertEquals("from-env", envOverride.until());
+
+        ScannerConfig cliOverride = ConfigBuilder.build(cli("--until=from-cli"),
+                configFile, env("SCANNER_UNTIL", "from-env"));
+        assertEquals("from-cli", cliOverride.until());
+    }
+
+    @Test
     void unknownKeyInFileIsRejected(@TempDir Path dir) {
         Path configFile = writeConfigUnchecked(dir, "toppic=typo\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -419,7 +444,7 @@ class ConfigBuilderTest {
     }
 
     private static Set<String> knownValueKeys() {
-        return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
+        return setOf("config", "topic", "from", "until", "limit", "max-messages", "partition", "output", "fields",
                 "distinct", "delay", "match.key", "match.header", "match.field");
     }
 

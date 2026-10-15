@@ -59,6 +59,34 @@ final class StartupPipeline {
         }
     }
 
+    /** Null (no upper bound) if --until= wasn't given. Always a plain instant -- never earliest/latest/offset:<n>. */
+    static Long parseUntilEpochMillis(ScannerConfig config) throws ExitSignal {
+        if (config.until() == null) {
+            return null;
+        }
+
+        try {
+            return StartPosition.parseEpochMillis(config.until());
+        } catch (IllegalArgumentException e) {
+            throw new ExitSignal(2, "invalid --until value '" + config.until() + "': " + e.getMessage());
+        }
+    }
+
+    /**
+     * An inverted range (--until before the resolved --from instant) can never match anything --
+     * the same "would silently have zero effect" case this tool always rejects rather than letting
+     * run anyway. Only checked when --from resolved to a concrete instant: earliest/latest/offset:<n>
+     * have no comparable timestamp of their own.
+     */
+    static void requireUntilAfterFrom(StartPosition from, Long until) throws ExitSignal {
+        if (until == null || from.kind() != StartPosition.Kind.TIMESTAMP) {
+            return;
+        }
+        if (until < from.timestampMs()) {
+            throw new ExitSignal(2, "--until is before --from -- this range can never match anything");
+        }
+    }
+
     static RecordFilter buildFilter(ScannerConfig config) throws ExitSignal {
         try {
             return RecordFilterFactory.build(config.match());

@@ -37,6 +37,7 @@ public final class ScanEngine {
     private final boolean keepMatches;
     private final MatchHandler onMatch;
     private final Integer partition;
+    private final Long until;
 
     private List<TopicPartition> partitions;
     private Map<TopicPartition, Long> snapshotEnd;
@@ -44,8 +45,8 @@ public final class ScanEngine {
     private long matchCount;
     private long lastProgressAt;
 
-    private ScanEngine(Consumer<byte[], byte[]> consumer, RecordFilter filter, long limit,
-                        boolean follow, boolean keepMatches, MatchHandler onMatch, Integer partition) {
+    private ScanEngine(Consumer<byte[], byte[]> consumer, RecordFilter filter, long limit, boolean follow,
+                        boolean keepMatches, MatchHandler onMatch, Integer partition, Long until) {
         this.consumer = consumer;
         this.filter = filter;
         this.limit = limit;
@@ -53,6 +54,7 @@ public final class ScanEngine {
         this.keepMatches = keepMatches;
         this.onMatch = onMatch;
         this.partition = partition;
+        this.until = until;
     }
 
     /** Runs one bounded scan of {@code topic} and returns its result. */
@@ -96,7 +98,24 @@ public final class ScanEngine {
     public static ScanResult scan(Consumer<byte[], byte[]> consumer, String topic, StartPosition from,
                                    RecordFilter filter, long limit, boolean follow, boolean keepMatches,
                                    MatchHandler onMatch, Integer partition) throws ScanException {
-        return new ScanEngine(consumer, filter, limit, follow, keepMatches, onMatch, partition).run(topic, from);
+        return scan(consumer, topic, from, filter, limit, follow, keepMatches, onMatch, partition, null);
+    }
+
+    /**
+     * Same as the other {@code scan()} overloads, but additionally bounds the scan by an upper,
+     * exclusive timestamp bound ({@code until}, epoch-ms, or null for no bound) -- a record whose
+     * timestamp is after {@code until} is skipped (not matched, not counted), mirroring how a
+     * record beyond the bounded-scan snapshot is already skipped. Deliberately never used to stop a
+     * partition early: Kafka does not guarantee non-decreasing timestamps within a partition (log
+     * compaction, producer retries, clock skew across multiple producers), so assuming "past until
+     * means every later record is also past it" could silently truncate a scan and produce a false
+     * "done" -- the scan still reads to each partition's snapshot end regardless.
+     */
+    public static ScanResult scan(Consumer<byte[], byte[]> consumer, String topic, StartPosition from,
+                                   RecordFilter filter, long limit, boolean follow, boolean keepMatches,
+                                   MatchHandler onMatch, Integer partition, Long until) throws ScanException {
+        return new ScanEngine(consumer, filter, limit, follow, keepMatches, onMatch, partition, until)
+                .run(topic, from);
     }
 
     private ScanResult run(String topic, StartPosition from) throws ScanException {
@@ -160,8 +179,8 @@ public final class ScanEngine {
 
     private void processRecords(ConsumerRecords<byte[], byte[]> polled) {
         for (ConsumerRecord<byte[], byte[]> record : polled) {
-            if (isBeyondSnapshot(record)) {
-                continue; // beyond this bounded scan's snapshot; ignore but don't crash
+            if (isBeyondSnapshot(record) || isAfterUntilBound(record)) {
+                continue; // beyond this bounded scan's snapshot, or past --until=; ignore but don't crash
             }
 
             recordIfMatches(record);
@@ -182,6 +201,15 @@ public final class ScanEngine {
         Long end = snapshotEnd.get(tp);
 
         return end != null && record.offset() >= end;
+    }
+
+    /**
+     * A record timestamped after the --until= bound is skipped -- not matched, not counted. Never
+     * used to stop a partition early (see {@link #scan} doc): a skipped record here doesn't imply
+     * every later record in the same partition is also past the bound.
+     */
+    private boolean isAfterUntilBound(ConsumerRecord<byte[], byte[]> record) {
+        return until != null && record.timestamp() > until;
     }
 
     /**

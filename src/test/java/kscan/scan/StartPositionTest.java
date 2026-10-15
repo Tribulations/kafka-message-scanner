@@ -91,4 +91,22 @@ class StartPositionTest {
     void rejectsAMalformedDate() {
         assertThrows(IllegalArgumentException.class, () -> StartPosition.parse("2026-13-45"));
     }
+
+    @Test
+    void parseEpochMillisAcceptsABareEpochMsNumber() {
+        assertEquals(1700000000000L, StartPosition.parseEpochMillis("1700000000000"));
+    }
+
+    @Test
+    void parseEpochMillisAcceptsAHumanReadableDateTime() {
+        long expected = LocalDate.of(2026, 10, 1).atStartOfDay(ZoneId.systemDefault())
+                .toInstant().toEpochMilli();
+
+        assertEquals(expected, StartPosition.parseEpochMillis("2026-10-01"));
+    }
+
+    @Test
+    void parseEpochMillisRejectsAMalformedValue() {
+        assertThrows(IllegalArgumentException.class, () -> StartPosition.parseEpochMillis("banana"));
+    }
 }

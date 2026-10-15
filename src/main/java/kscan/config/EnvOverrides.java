@@ -28,6 +28,8 @@ final class EnvOverrides {
             values.topic = value;
         } else if (envKey.equals("SCANNER_FROM")) {
             values.from = value;
+        } else if (envKey.equals("SCANNER_UNTIL")) {
+            values.until = value;
         } else if (envKey.equals("SCANNER_FOLLOW")) {
             values.follow = StrictParsers.parseBoolean(envKey, value, values.follow);
         } else if (envKey.equals("SCANNER_LIMIT")) {

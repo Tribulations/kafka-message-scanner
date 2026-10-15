@@ -25,7 +25,7 @@ final class RunSummary {
     String connectionLine() {
         return "kscan: connecting to bootstrap.servers=" + bootstrapServers()
                 + " topic=" + config.topic() + partitionSuffix()
-                + " from=" + config.from() + limitSuffix() + " output=" + config.output()
+                + " from=" + config.from() + untilSuffix() + limitSuffix() + " output=" + config.output()
                 + fieldsSuffix() + distinctSuffix() + " config=" + configFileSuffix()
                 + "\n";
     }
@@ -48,6 +48,14 @@ final class RunSummary {
      */
     private String partitionSuffix() {
         return config.partition() == null ? "" : " partition=" + config.partition();
+    }
+
+    /**
+     * " until=<raw>" when --until= bounds the end of the scan, else empty -- so a time-bounded run
+     * is as visible in the summary as every other active constraint.
+     */
+    private String untilSuffix() {
+        return config.until() == null ? "" : " until=" + config.until();
     }
 
     /**

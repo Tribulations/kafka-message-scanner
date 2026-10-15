@@ -58,8 +58,9 @@ final class ScanRunner {
     }
 
     /** Opens the consumer, runs the scan, writes the result, and maps the outcome to an exit code. */
-    static int executeScan(Properties kafkaProps, ScannerConfig config, StartPosition from, RecordFilter filter,
-                            OutputMode mode, Set<OutputField> fields, DistinctSpec distinct) throws ExitSignal {
+    static int executeScan(Properties kafkaProps, ScannerConfig config, StartPosition from, Long until,
+                            RecordFilter filter, OutputMode mode, Set<OutputField> fields, DistinctSpec distinct)
+            throws ExitSignal {
         RunSummary summary = new RunSummary(kafkaProps, config);
         System.err.println(summary.connectionLine());
         for (String warning : ScanRiskWarnings.evaluate(config, from, mode)) {
@@ -74,7 +75,7 @@ final class ScanRunner {
 
             try {
                 OutputWriter writer = newWriter(mode, fields, distinct);
-                ScanResult result = runScan(consumer, config, from, filter, mode, writer);
+                ScanResult result = runScan(consumer, config, from, until, filter, mode, writer);
                 writeResult(result, writer);
                 System.err.println(summary.resultLine(result.matchCount()));
 
@@ -126,7 +127,7 @@ final class ScanRunner {
      * actually read it, instead of it scrolling by instantly.
      */
     private static ScanResult runScan(KafkaConsumer<byte[], byte[]> consumer, ScannerConfig config,
-                                       StartPosition from, RecordFilter filter, OutputMode mode,
+                                       StartPosition from, Long until, RecordFilter filter, OutputMode mode,
                                        OutputWriter writer) throws ExitSignal {
         try {
             MatchHandler onMatch = config.follow() ? record -> {
@@ -136,7 +137,7 @@ final class ScanRunner {
             boolean keepMatches = mode != OutputMode.COUNT;
 
             return ScanEngine.scan(consumer, config.topic(), from, filter, config.limit(), config.follow(),
-                    keepMatches, onMatch, config.partition());
+                    keepMatches, onMatch, config.partition(), until);
         } catch (ScanException e) {
             throw new ExitSignal(2, e.getMessage());
         }

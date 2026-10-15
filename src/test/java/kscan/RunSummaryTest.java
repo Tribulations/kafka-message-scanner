@@ -61,6 +61,24 @@ class RunSummaryTest {
     }
 
     @Test
+    void connectionLineOmitsUntilWhenUnset() throws Exception {
+        ScannerConfig config = config(null);
+
+        String line = new RunSummary(kafkaProps(), config).connectionLine();
+
+        assertFalse(line.contains("until="));
+    }
+
+    @Test
+    void connectionLineShowsUntilWhenSet() throws Exception {
+        ScannerConfig config = config(null, "--until=2026-10-15T10:00:00Z");
+
+        String line = new RunSummary(kafkaProps(), config).connectionLine();
+
+        assertTrue(line.contains("until=2026-10-15T10:00:00Z"));
+    }
+
+    @Test
     void connectionLineShowsNoneForAnUnresolvedConfigFile() throws Exception {
         ScannerConfig config = config(null);
 
@@ -124,7 +142,7 @@ class RunSummaryTest {
     }
 
     private static Set<String> knownValueKeys() {
-        return setOf("topic", "from", "limit", "partition", "output", "fields", "distinct");
+        return setOf("topic", "from", "until", "limit", "partition", "output", "fields", "distinct");
     }
 
     private static Set<String> knownBooleanKeys() {

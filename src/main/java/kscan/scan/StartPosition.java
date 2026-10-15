@@ -43,20 +43,36 @@ public final class StartPosition {
             return parseOffset(raw);
         }
 
-        Long humanEpochMs = tryParseHumanDateTime(raw);
-        if (humanEpochMs != null) {
-            return new StartPosition(Kind.TIMESTAMP, humanEpochMs);
-        }
-
         try {
-            long epochMs = Long.parseLong(raw);
-
-            return new StartPosition(Kind.TIMESTAMP, epochMs);
-        } catch (NumberFormatException e) {
+            return new StartPosition(Kind.TIMESTAMP, parseEpochMillis(raw));
+        } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("invalid --from value '" + raw
                     + "': expected 'earliest', 'latest', an epoch-ms timestamp, offset:<n>, or a "
                     + "date/time like 2026-10-01, '2026-10-01 08:25:45.345', 2026-10-01T08:25:45Z, "
                     + "or 2026-10-01T08:25:45+02:00");
+        }
+    }
+
+    /**
+     * Parses a plain instant -- a human-readable date/time, or a bare epoch-ms timestamp -- with
+     * no earliest/latest/offset: handling. Shared by {@link #parse(String)}'s TIMESTAMP case and
+     * {@code --until=}, which is always a plain instant and never one of those other three forms.
+     *
+     * @throws IllegalArgumentException if raw is neither a recognized date/time form nor a bare
+     *                                   epoch-ms number.
+     */
+    public static long parseEpochMillis(String raw) {
+        Long humanEpochMs = tryParseHumanDateTime(raw);
+        if (humanEpochMs != null) {
+            return humanEpochMs;
+        }
+
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("invalid timestamp '" + raw
+                    + "': expected an epoch-ms timestamp or a date/time like 2026-10-01, "
+                    + "'2026-10-01 08:25:45.345', 2026-10-01T08:25:45Z, or 2026-10-01T08:25:45+02:00");
         }
     }
 
