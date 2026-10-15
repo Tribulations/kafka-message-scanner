@@ -35,6 +35,9 @@ final class CliOverrides {
         if (cli.getSingle("distinct") != null) {
             values.distinct = cli.getSingle("distinct");
         }
+        if (cli.getSingle("delay") != null) {
+            values.delay = StrictParsers.parseLong("delay", cli.getSingle("delay"), values.delay);
+        }
         if (cli.getSingle("match.key") != null) {
             values.matchKey = cli.getSingle("match.key");
         }

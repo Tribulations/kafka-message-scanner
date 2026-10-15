@@ -22,7 +22,14 @@ final class FileDefaults {
     /** earliest is the safer built-in default -- latest would silently miss anything already there. */
     private static final String DEFAULT_FROM = "earliest";
     private static final String DEFAULT_OUTPUT = "pretty";
-    private static final long DEFAULT_LIMIT = 0L;
+    /**
+     * One true default (matches the shipped scanner.properties exactly), not a two-tier split --
+     * unbounded scanning is only ever reachable via an explicit limit=0, never an accidental
+     * fallback. Combined with the default from=earliest and no partition restriction, an unlimited
+     * default here would mean a bare jar with no config file at all silently reads an entire
+     * production topic on first run.
+     */
+    private static final long DEFAULT_LIMIT = 50L;
 
     private FileDefaults() {
     }

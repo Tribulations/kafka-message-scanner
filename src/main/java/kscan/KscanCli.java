@@ -36,6 +36,10 @@ final class KscanCli {
             + "  --follow              keep polling for new records after reaching the current end\n"
             + "                        (tail -f style); stops on Ctrl-C/SIGTERM\n"
             + "                        e.g. --follow --from=latest   (only see records from now on)\n"
+            + "  --delay=<ms>          pause this many ms after printing each live match -- only\n"
+            + "                        valid with --follow (a bounded scan has no per-record moment\n"
+            + "                        to pace); errors with --output=distinct or --list-topics\n"
+            + "                        e.g. --follow --delay=500   (watch live traffic at a readable pace)\n"
             + "  --config=<path>       path to scanner.properties (default: next to the jar)\n"
             + "                        e.g. --config=/etc/kscan/scanner.properties\n"
             + "  --list-topics         list topic names visible on the cluster and exit (no --topic= needed)\n"
@@ -66,8 +70,8 @@ final class KscanCli {
             + "                             --match.field=ts~^2026-10-22   (all timestamps on that day)\n"
             + "  --match.exact         require match.key/match.header to match the full value, not a substring\n"
             + "  --match.case-sensitive  compare match.key/match.header case-sensitively\n"
-            + "  --limit=<n>           stop after n matches (0 = unlimited; shipped scanner.properties\n"
-            + "                        defaults this to 50); with --follow, blocks until n matches\n"
+            + "  --limit=<n>           stop after n matches (default: 50; 0 = unlimited, only via an\n"
+            + "                        explicit --limit=0); with --follow, blocks until n matches\n"
             + "                        show up, then exits\n"
             + "                        e.g. --limit=5   or   --follow --limit=1 --match.key=order-42\n"
             + "  --max-messages=<n>    alias for --limit (same meaning; Kafka's own console-consumer\n"
@@ -113,7 +117,7 @@ final class KscanCli {
 
     private static Set<String> knownValueKeys() {
         return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
-                "distinct", "match.key", "match.header", "match.field");
+                "distinct", "delay", "match.key", "match.header", "match.field");
     }
 
     private static Set<String> knownBooleanKeys() {

@@ -26,6 +26,8 @@ import java.util.Set;
  *   - a short default.api.timeout.ms, unless the caller explicitly overrode it,
  *     so an unreachable broker fails fast instead of hanging for the client's
  *     default 60s.
+ *   - max.poll.records=1 while --delay= is active, unless the caller explicitly
+ *     overrode it -- see {@link #build(Properties, long)}.
  */
 public final class ConsumerPropertiesFactory {
 
@@ -36,14 +38,29 @@ public final class ConsumerPropertiesFactory {
     private ConsumerPropertiesFactory() {
     }
 
+    /** Same as {@link #build(Properties, long)} with no --delay= (the common case). */
+    public static Properties build(Properties kafkaPassthrough) throws ConfigLoadException {
+        return build(kafkaPassthrough, 0L);
+    }
+
     /**
      * Builds the final Kafka consumer properties for one run.
      *
+     * @param delayMs the --delay= value in effect, or 0 if unset. When set, pins
+     *                max.poll.records=1 (unless the caller already set their own) -- otherwise a
+     *                single poll() against a busy topic can return a whole batch (Kafka's client
+     *                default is 500 records per poll), and {@code --delay=}'s own per-record sleep
+     *                would then process that entire batch -- sequentially, each sleeping -- before
+     *                the main thread ever calls poll() again, which is the only place a
+     *                Ctrl-C/SIGTERM-triggered wakeup() actually takes effect. Capping poll batches
+     *                to 1 record bounds that unresponsiveness to roughly one delay interval instead
+     *                of an entire batch (confirmed live: without this, a few hundred queued records
+     *                at --delay=800 made Ctrl-C take tens of seconds to actually stop anything).
      * @throws ConfigLoadException if an unrecognized kafka.* property name is present, a
      *                              disallowed property (group.id) is present, or a required one
      *                              (bootstrap.servers) is missing.
      */
-    public static Properties build(Properties kafkaPassthrough) throws ConfigLoadException {
+    public static Properties build(Properties kafkaPassthrough, long delayMs) throws ConfigLoadException {
         rejectUnknownKafkaProperties(kafkaPassthrough);
         rejectGroupId(kafkaPassthrough);
         requireBootstrapServers(kafkaPassthrough);
@@ -51,6 +68,9 @@ public final class ConsumerPropertiesFactory {
         Properties props = new Properties();
         props.putAll(kafkaPassthrough);
         props.putIfAbsent(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, DEFAULT_API_TIMEOUT_MS);
+        if (delayMs > 0) {
+            props.putIfAbsent(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "1");
+        }
         applyHardPins(props);
 
         return props;

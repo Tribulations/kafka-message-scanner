@@ -17,6 +17,7 @@ public final class ScannerConfig {
     private final String output;
     private final String fields;
     private final String distinct;
+    private final long delay;
     private final Path configFile;
     private final Properties kafkaProperties;
     private final Properties jvmProperties;
@@ -38,6 +39,13 @@ public final class ScannerConfig {
      *                        validated by {@link kscan.output.DistinctSpec#parse(String)}, not here.
      *                        CLI-only (no file/env form) and only valid together with
      *                        {@code output=distinct} -- same reasoning as fields/partition.
+     * @param delay           milliseconds to pause after printing each live match; 0 = no delay.
+     *                        CLI-only (no file/env form) and only valid together with
+     *                        {@code --follow} -- a persisted default here could silently make
+     *                        automated/scripted usage unexpectedly slow. Only meaningful while
+     *                        following: a bounded scan's output is produced entirely inside each
+     *                        {@code OutputWriter}'s own {@code write()}, with no per-record moment
+     *                        outside it to pace.
      * @param configFile      the config file actually read for this run, or null if none was (no
      *                        file existed at the resolved, non-explicit default path).
      * @param kafkaProperties kafka.* passthrough properties, already stripped of the "kafka." prefix.
@@ -47,7 +55,7 @@ public final class ScannerConfig {
      *                        Kafka client properties.
      */
     public ScannerConfig(String topic, String from, boolean follow, long limit, Integer partition, String output,
-                          String fields, String distinct, Path configFile, Properties kafkaProperties,
+                          String fields, String distinct, long delay, Path configFile, Properties kafkaProperties,
                           Properties jvmProperties, MatchConfig match) {
         this.topic = topic;
         this.from = from;
@@ -57,6 +65,7 @@ public final class ScannerConfig {
         this.output = output;
         this.fields = fields;
         this.distinct = distinct;
+        this.delay = delay;
         this.configFile = configFile;
         this.kafkaProperties = kafkaProperties;
         this.jvmProperties = jvmProperties;
@@ -101,6 +110,11 @@ public final class ScannerConfig {
     /** Raw --distinct value, or null if unset; not yet parsed/validated. */
     public String distinct() {
         return distinct;
+    }
+
+    /** Milliseconds to pause after printing each live match; 0 = no delay. Only meaningful with --follow. */
+    public long delay() {
+        return delay;
     }
 
     /** The config file actually read for this run, or null if none was (no file existed to read). */

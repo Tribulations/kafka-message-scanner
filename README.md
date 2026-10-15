@@ -141,9 +141,12 @@ java -jar target/kscan.jar
 `limit=50` is there so a zero-flag run never silently reads an entire
 large topic — see [stdout / stderr contract](#stdout--stderr-contract) for
 how kscan always shows you the limit actually in effect, so a capped
-result is never mistaken for a complete one. The *built-in* fallback with
-no config file at all is still `0` (unlimited), unchanged — this default
-only applies when an actual `scanner.properties` is in use.
+result is never mistaken for a complete one. This is the **one** default,
+whether or not a config file is present or complete — there's no separate
+"unlimited" fallback for a bare install with no `scanner.properties`.
+Unbounded scanning is only ever reachable via an explicit `--limit=0`
+(or `SCANNER_LIMIT=0`, or `limit=0` in a file) — a deliberate, visible
+choice, never an accidental one on a huge production topic.
 
 Any flag still overrides its file default individually — CLI always wins
 (see [Config precedence](#config-precedence)):
@@ -199,6 +202,7 @@ to a wrong default and then report a false "not found".
 | `--topic=<name>` | yes (or via config/env) | — | Topic to scan |
 | `--from=<pos>` | no | `earliest` | `earliest` \| `latest` \| `<epoch-ms>` \| a human-readable date/time (e.g. `2026-10-01`, `"2026-10-01 08:25:45"`, `2026-10-01T08:25:45Z`) \| `offset:<n>` (see [Jumping to a known offset](#jumping-to-a-known-offset)) |
 | `--follow` | no | off | Keep polling for new records after reaching the current end (`tail -f` style); stops on Ctrl-C/SIGTERM |
+| `--delay=<ms>` | only with `--follow` | — | Pause this many ms after printing each live match (CLI-only; see [Following a topic](#following-a-topic-tail--f)) |
 | `--config=<path>` | no | next to the jar | Path to a `scanner.properties`-style file |
 | `--list-topics` | no | off | List topic names on the cluster and exit; `--topic=` not required |
 | `--kafka.<prop>=<val>` | no | — | Kafka client property passthrough, repeatable for different keys; `<prop>` must be a real consumer client property name (see below) |
@@ -208,7 +212,7 @@ to a wrong default and then report a false "not found".
 | `--match.field=<spec>` | no | — | Match a JSON field in the record value; repeatable, ANDed together |
 | `--match.exact` | no | off | Require `match.key`/`match.header` to match the full value, not a substring |
 | `--match.case-sensitive` | no | off | Compare `match.key`/`match.header` case-sensitively |
-| `--limit=<n>` | no | `0` (unlimited); `50` via the shipped `scanner.properties` | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
+| `--limit=<n>` | no | `50` (0 = unlimited, only via an explicit `--limit=0`) | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
 | `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
 | `--partition=<n>` | no | all, interleaved | Restrict the scan to one partition (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
 | `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` \| `distinct` (see [Output modes](#output-modes)) |
@@ -257,6 +261,24 @@ summary line and exit code (0/1/2) a bounded scan would, and does **not**
 exit with the shell's default 128+signal code. A quiet topic never triggers
 the stall-failure that a bounded scan would (an idle topic is exactly what
 following should tolerate).
+
+`--delay=<ms>` pauses this many milliseconds after printing each live
+match — useful for watching a busy topic at a pace a human can actually
+read, instead of it scrolling by instantly. CLI-only (a persisted default
+could silently make automated/scripted usage unexpectedly slow), and only
+valid together with `--follow`: a bounded scan's output is produced
+entirely inside each output mode's own final write step, with no
+per-record moment outside it to pace, and `--output=distinct`/
+`--list-topics` never print per-record output at all — combining
+`--delay=` with any of those is a conflict (exit 2), not a silent no-op.
+When active, kscan also pins `max.poll.records=1` (unless you've already
+set your own) — otherwise a single poll against a busy topic could return
+a whole batch, and pacing through an entire batch sequentially would make
+Ctrl-C take much longer than expected to actually stop anything.
+
+```bash
+java -jar target/kscan.jar --topic=orders --follow --delay=500
+```
 
 ### Restricting to one partition
 
@@ -369,10 +391,10 @@ java -jar target/kscan.jar --topic=orders --output=distinct --distinct=header:so
 java -jar target/kscan.jar --topic=orders --output=distinct --distinct=field:status --match.field=region=eu
 ```
 
-`--limit=<n>` stops a scan after `n` matches (`0`, the default, means
-unlimited). Combined with `--follow`, this turns it into "block until `n`
-matches show up, then exit" — useful for scripting a wait-for-this-message
-check without an open-ended tail:
+`--limit=<n>` stops a scan after `n` matches (default: `50`; `0` means
+unlimited, only via an explicit `--limit=0`). Combined with `--follow`,
+this turns it into "block until `n` matches show up, then exit" — useful
+for scripting a wait-for-this-message check without an open-ended tail:
 
 ```bash
 # exits 0 as soon as 1 matching record shows up, however long that takes
@@ -533,6 +555,17 @@ kscan: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest
 kscan: 50 matched on topic=orders limit=50 bootstrap.servers=localhost:9092
 ```
 
+Right after the connecting line, kscan also prints a non-blocking
+`kscan: WARNING: ...` line (still stderr-only) for a couple of scan
+shapes that can be very costly against a huge production cluster: an
+unbounded (`--limit=0`) scan from `earliest` across every partition, and
+a very large `--limit` (100,000+) combined with a buffering output mode
+(`pretty`/`json`/`distinct` all hold every matched record in memory until
+the scan finishes; only `--follow` and `--output=count` stream instead).
+These are informational only — never a prompt, never blocking, stdout and
+exit codes are unaffected — because this tool is meant to run unattended
+(piped, cron, CI), where a confirmation prompt would just hang.
+
 ## Testing
 
 ```bash
@@ -641,3 +674,8 @@ packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 c
   falling back to its two hardcoded RHEL/CentOS 7-/9-style paths, so most
   hosts no longer need an override; if none of those find a usable Java,
   set `KSCAN_JAVA_HOME` explicitly (check `ls /usr/lib/jvm` on that host).
+- No execution timeout on a user-supplied `--match.field=path~regex`. A
+  deliberately pathological pattern (catastrophic backtracking) could hang
+  the process against real message content. This requires a specifically
+  crafted bad regex, not something a large topic triggers on its own — be
+  careful with complex/untrusted regexes against production data.

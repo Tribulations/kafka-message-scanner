@@ -45,7 +45,7 @@ final class StartupPipeline {
 
     static Properties buildKafkaProperties(ScannerConfig config) throws ExitSignal {
         try {
-            return ConsumerPropertiesFactory.build(config.kafkaProperties());
+            return ConsumerPropertiesFactory.build(config.kafkaProperties(), config.delay());
         } catch (ConfigLoadException e) {
             throw new ExitSignal(2, e.getMessage());
         }

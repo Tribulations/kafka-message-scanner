@@ -108,6 +108,34 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void defaultLimitIsFiftyNotUnlimitedWhenNothingSetsIt(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli(), configFile, Collections.emptyMap());
+
+        assertEquals(50L, config.limit());
+    }
+
+    @Test
+    void defaultLimitIsFiftyEvenWithNoConfigFileAtAll(@TempDir Path dir) throws Exception {
+        Path missing = dir.resolve("does-not-exist.properties");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--topic=t", "--kafka.bootstrap.servers=localhost:9092"), missing, Collections.emptyMap());
+
+        assertEquals(50L, config.limit());
+    }
+
+    @Test
+    void unlimitedIsOnlyReachableViaAnExplicitZero(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli("--limit=0"), configFile, Collections.emptyMap());
+
+        assertEquals(0L, config.limit());
+    }
+
+    @Test
     void negativeLimitIsRejected(@TempDir Path dir) {
         Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\nlimit=-1\n");
 
@@ -277,6 +305,56 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void delayIsCliOnlyAndZeroByDefault(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig noDelay = ConfigBuilder.build(cli("--follow"), configFile, Collections.emptyMap());
+        assertEquals(0L, noDelay.delay());
+
+        ScannerConfig withDelay = ConfigBuilder.build(cli("--follow", "--delay=500"), configFile,
+                Collections.emptyMap());
+        assertEquals(500L, withDelay.delay());
+    }
+
+    @Test
+    void delayInTheFileIsRejectedAsAnUnknownKey(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir,
+                "topic=t\nkafka.bootstrap.servers=localhost:9092\ndelay=500\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli(), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void delayRequiresFollow(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--delay=500"), configFile, Collections.emptyMap()));
+    }
+
+    // Note: --delay + --output=distinct would also be a conflict in principle (distinct's
+    // writeRecord never prints anything), but it's currently unreachable in practice -- distinct
+    // already unconditionally rejects --follow on its own, see distinctConflictsWithFollow above,
+    // and --delay requires --follow, so the two conditions can never both hold at once today.
+
+    @Test
+    void delayConflictsWithListTopics(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--list-topics", "--follow", "--delay=500"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void negativeDelayIsRejected(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--follow", "--delay=-1"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void configFileReflectsTheActualResolvedPathWhenOneWasUsed(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -333,7 +411,7 @@ class ConfigBuilderTest {
 
     private static Set<String> knownValueKeys() {
         return setOf("config", "topic", "from", "limit", "max-messages", "partition", "output", "fields",
-                "distinct", "match.key", "match.header", "match.field");
+                "distinct", "delay", "match.key", "match.header", "match.field");
     }
 
     private static Set<String> knownBooleanKeys() {

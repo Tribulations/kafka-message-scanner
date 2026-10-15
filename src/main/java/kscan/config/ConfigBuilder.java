@@ -49,8 +49,8 @@ public final class ConfigBuilder {
                 ? resolution.path : null;
 
         return new ScannerConfig(values.topic, values.from, values.follow, values.limit, values.partition,
-                values.output, values.fields, values.distinct, configFileUsed, values.kafkaProps, values.jvmProps,
-                match);
+                values.output, values.fields, values.distinct, values.delay, configFileUsed, values.kafkaProps,
+                values.jvmProps, match);
     }
 
     /** Config-path resolution has its own file&lt;env&lt;CLI precedence, same as every other setting. */
@@ -101,6 +101,7 @@ public final class ConfigBuilder {
         String output;
         String fields;
         String distinct;
+        long delay;
         String matchKey;
         List<String> matchHeaderRaw = new ArrayList<>();
         List<String> matchFieldRaw = new ArrayList<>();

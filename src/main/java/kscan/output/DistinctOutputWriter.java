@@ -15,10 +15,18 @@ import java.util.Map;
  * -- a quick "what values actually exist" report, not a per-record dump. A record where the spec
  * found no value (missing header, missing/absent JSON path, non-JSON value) is bucketed under
  * "&lt;missing&gt;" rather than silently dropped from the tally.
+ *
+ * A high-cardinality field (a UUID, a timestamp) could otherwise grow this tally's own memory
+ * footprint unboundedly, independent of how reasonable --limit is -- once {@link #MAX_DISTINCT_VALUES}
+ * distinct values have been seen, every further *new* value is folded into a single overflow
+ * bucket instead of growing the map forever, so memory stays bounded regardless of the data.
  */
 public final class DistinctOutputWriter implements OutputWriter {
 
     private static final String MISSING_BUCKET = "<missing>";
+    /** Bounds this writer's own memory use -- independent of --limit, since cardinality isn't. */
+    private static final int MAX_DISTINCT_VALUES = 10_000;
+    private static final String OVERFLOW_BUCKET = "<other: too many distinct values, truncated>";
 
     private final DistinctSpec spec;
     private final Map<String, Long> counts = new LinkedHashMap<>();
@@ -40,6 +48,9 @@ public final class DistinctOutputWriter implements OutputWriter {
     public void writeRecord(MatchedRecord record, PrintStream stdout) {
         String value = spec.extract(record);
         String bucket = value == null ? MISSING_BUCKET : value;
+        if (!counts.containsKey(bucket) && counts.size() >= MAX_DISTINCT_VALUES) {
+            bucket = OVERFLOW_BUCKET;
+        }
         counts.merge(bucket, 1L, Long::sum);
     }
 

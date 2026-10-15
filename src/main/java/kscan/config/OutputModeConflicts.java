@@ -15,6 +15,7 @@ final class OutputModeConflicts {
     static void validate(ConfigBuilder.MutableValues values, CliArgs cli) throws ConfigLoadException {
         requireFieldsOnlyWithPrettyOutput(values, cli);
         requireDistinctAndOutputTogether(values, cli);
+        requireDelayOnlyWithFollow(values, cli);
     }
 
     /**
@@ -66,6 +67,37 @@ final class OutputModeConflicts {
         if (values.follow) {
             throw new ConfigLoadException(
                     "--output=distinct does not support --follow yet -- give one or the other");
+        }
+    }
+
+    /**
+     * --delay=<ms> only has somewhere to apply while --follow is streaming live matches one at a
+     * time -- a bounded scan's output is produced entirely inside each OutputWriter's own write(),
+     * with no per-record moment outside it to pace, so a delay there would silently have zero
+     * effect. Also conflicts with --list-topics (no records are ever printed there) and, in
+     * principle, --output=distinct (its writeRecord never prints anything, only tallies -- see
+     * DistinctOutputWriter) -- though that last check is currently unreachable in practice, since
+     * requireDistinctAndOutputTogether() above already unconditionally rejects --follow with
+     * --output=distinct regardless of --delay. Kept anyway: if distinct ever gains --follow support
+     * (an explicitly deferred, not forgotten, future item), this becomes live immediately with no
+     * further thought needed.
+     */
+    private static void requireDelayOnlyWithFollow(ConfigBuilder.MutableValues values, CliArgs cli)
+            throws ConfigLoadException {
+        if (values.delay == 0) {
+            return;
+        }
+        if (!values.follow) {
+            throw new ConfigLoadException(
+                    "--delay only has an effect with --follow -- it paces live streamed matches, "
+                            + "which only happens while following");
+        }
+        if (cli.hasFlag("list-topics")) {
+            throw new ConfigLoadException("--delay has no effect with --list-topics -- give only one");
+        }
+        if (values.output.equalsIgnoreCase("distinct")) {
+            throw new ConfigLoadException(
+                    "--delay has no effect with --output=distinct -- it never prints per-record output");
         }
     }
 }

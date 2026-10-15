@@ -101,6 +101,25 @@ class ConsumerPropertiesFactoryTest {
     }
 
     @Test
+    void pinsMaxPollRecordsToOneWhenDelayIsActive() throws ConfigLoadException {
+        Properties builtNoDelay = ConsumerPropertiesFactory.build(minimal(), 0L);
+        assertFalse(builtNoDelay.containsKey(ConsumerConfig.MAX_POLL_RECORDS_CONFIG));
+
+        Properties builtWithDelay = ConsumerPropertiesFactory.build(minimal(), 500L);
+        assertEquals("1", builtWithDelay.getProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG));
+    }
+
+    @Test
+    void anExplicitMaxPollRecordsOverrideIsRespectedEvenWithDelayActive() throws ConfigLoadException {
+        Properties passthrough = minimal();
+        passthrough.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "50");
+
+        Properties built = ConsumerPropertiesFactory.build(passthrough, 500L);
+
+        assertEquals("50", built.getProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG));
+    }
+
+    @Test
     void builtPropertiesConstructARealKafkaConsumerWithNoClientSideValidationErrors() throws ConfigLoadException {
         Properties built = ConsumerPropertiesFactory.build(minimal());
 

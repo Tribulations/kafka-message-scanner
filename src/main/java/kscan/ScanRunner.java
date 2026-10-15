@@ -62,6 +62,9 @@ final class ScanRunner {
                             OutputMode mode, Set<OutputField> fields, DistinctSpec distinct) throws ExitSignal {
         RunSummary summary = new RunSummary(kafkaProps, config);
         System.err.println(summary.connectionLine());
+        for (String warning : ScanRiskWarnings.evaluate(config, from, mode)) {
+            System.err.println(warning);
+        }
 
         try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(kafkaProps)) {
             ShutdownCoordinator shutdown = new ShutdownCoordinator(consumer);
@@ -118,19 +121,36 @@ final class ScanRunner {
      * For {@code --follow}, matches are streamed to {@code writer} as found (the scan may run
      * indefinitely, so it can't wait until the end to print anything); otherwise unchanged from a
      * plain bounded scan. Count mode doesn't need the matched records kept around afterward -- only
-     * the final count -- so it opts out of accumulating them at all.
+     * the final count -- so it opts out of accumulating them at all. {@code --delay=} (only valid
+     * with --follow, enforced in OutputModeConflicts) paces each live match so a human watching can
+     * actually read it, instead of it scrolling by instantly.
      */
     private static ScanResult runScan(KafkaConsumer<byte[], byte[]> consumer, ScannerConfig config,
                                        StartPosition from, RecordFilter filter, OutputMode mode,
                                        OutputWriter writer) throws ExitSignal {
         try {
-            MatchHandler onMatch = config.follow() ? record -> writer.writeRecord(record, System.out) : null;
+            MatchHandler onMatch = config.follow() ? record -> {
+                writer.writeRecord(record, System.out);
+                sleep(config.delay());
+            } : null;
             boolean keepMatches = mode != OutputMode.COUNT;
 
             return ScanEngine.scan(consumer, config.topic(), from, filter, config.limit(), config.follow(),
                     keepMatches, onMatch, config.partition());
         } catch (ScanException e) {
             throw new ExitSignal(2, e.getMessage());
+        }
+    }
+
+    /** No-op for delayMs <= 0 (the common case -- --delay= is opt-in). */
+    private static void sleep(long delayMs) {
+        if (delayMs <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
