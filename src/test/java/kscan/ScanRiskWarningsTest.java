@@ -67,6 +67,24 @@ class ScanRiskWarningsTest {
     }
 
     @Test
+    void doesNotWarnJustBelowTheLargeLimitThreshold() throws Exception {
+        ScannerConfig config = config("--limit=99999");
+
+        List<String> warnings = ScanRiskWarnings.evaluate(config, StartPosition.parse("latest"), OutputMode.JSON);
+
+        assertTrue(warnings.stream().noneMatch(w -> w.contains("buffers every matched record")));
+    }
+
+    @Test
+    void warnsAtExactlyTheLargeLimitThreshold() throws Exception {
+        ScannerConfig config = config("--limit=100000");
+
+        List<String> warnings = ScanRiskWarnings.evaluate(config, StartPosition.parse("latest"), OutputMode.JSON);
+
+        assertTrue(containsSubstring(warnings, "buffers every matched record"));
+    }
+
+    @Test
     void warnsOnUnlimitedWithABufferingOutputModeEvenWithoutEarliest() throws Exception {
         ScannerConfig config = config("--limit=0", "--partition=0");
 

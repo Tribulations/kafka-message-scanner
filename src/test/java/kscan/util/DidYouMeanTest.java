@@ -32,6 +32,21 @@ class DidYouMeanTest {
         assertNull(DidYouMean.suggest("abc", validNames, 1));
     }
 
+    @Test
+    void acceptsAMatchExactlyAtMaxDistance() {
+        Set<String> validNames = setOf("abcd");
+
+        // "a" -> "abcd" is exactly 3 insertions -- right at the boundary (<=), not past it.
+        assertEquals("abcd", DidYouMean.suggest("a", validNames, 3));
+    }
+
+    @Test
+    void rejectsAMatchOneEditPastMaxDistance() {
+        Set<String> validNames = setOf("abcd");
+
+        assertNull(DidYouMean.suggest("a", validNames, 2));
+    }
+
     private static Set<String> setOf(String... values) {
         return new HashSet<>(Arrays.asList(values));
     }

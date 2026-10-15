@@ -62,6 +62,13 @@ class CliArgsTest {
     }
 
     @Test
+    void onlyTheFirstEqualsSignSplitsKeyFromValue() throws CliParseException {
+        CliArgs cli = parse("--match.header=token=a=b");
+
+        assertEquals(Collections.singletonList("token=a=b"), cli.getAll("match.header"));
+    }
+
+    @Test
     void missingValueKeyReturnsNullNotAnException() throws CliParseException {
         CliArgs cli = parse("--follow");
 

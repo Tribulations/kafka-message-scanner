@@ -172,6 +172,15 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void partitionZeroIsAValidExplicitValueNotTreatedAsUnset(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli("--partition=0"), configFile, Collections.emptyMap());
+
+        assertEquals(Integer.valueOf(0), config.partition());
+    }
+
+    @Test
     void invalidPartitionValuesAreRejected(@TempDir Path dir) {
         Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
