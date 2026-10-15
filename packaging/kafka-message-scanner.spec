@@ -2,12 +2,17 @@
 # and _sourcedir (the staging directory it fills with kscan.jar, bin/kscan,
 # and scanner.properties before invoking rpmbuild). Not meant to be built
 # directly with a bare `rpmbuild -bb` against this file alone.
-Name:           kscan
+#
+# Package name is descriptive (kafka-message-scanner) so the tool is easy to
+# find via `rpm -qa`/`dnf search` on an already-provisioned host; the command
+# it installs stays the short "kscan" (see bin/kscan) since that's what gets
+# typed repeatedly during ad-hoc debugging.
+Name:           kafka-message-scanner
 Version:        %{_version}
 Release:        1%{?dist}
 Summary:        Kafka topic/message scanner (debugging/analysis CLI)
 License:        Proprietary
-URL:            https://example.invalid/kscan
+URL:            https://example.invalid/kafka-message-scanner
 BuildArch:      noarch
 
 # Deliberately no "Requires: java-*" -- target hosts already provision
@@ -25,25 +30,25 @@ production topics without affecting any real consumer group.
 
 %install
 rm -rf %{buildroot}
-mkdir -p %{buildroot}/opt/kscan/bin
-mkdir -p %{buildroot}/etc/kscan
+mkdir -p %{buildroot}/opt/kafka-message-scanner/bin
+mkdir -p %{buildroot}/etc/kafka-message-scanner
 mkdir -p %{buildroot}/usr/bin
 
-install -m 0644 %{_sourcedir}/kscan.jar %{buildroot}/opt/kscan/kscan.jar
-install -m 0755 %{_sourcedir}/kscan %{buildroot}/opt/kscan/bin/kscan
-install -m 0644 %{_sourcedir}/scanner.properties %{buildroot}/etc/kscan/scanner.properties
-ln -sf ../../opt/kscan/bin/kscan %{buildroot}/usr/bin/kscan
+install -m 0644 %{_sourcedir}/kscan.jar %{buildroot}/opt/kafka-message-scanner/kscan.jar
+install -m 0755 %{_sourcedir}/kscan %{buildroot}/opt/kafka-message-scanner/bin/kscan
+install -m 0644 %{_sourcedir}/scanner.properties %{buildroot}/etc/kafka-message-scanner/scanner.properties
+ln -sf ../../opt/kafka-message-scanner/bin/kscan %{buildroot}/usr/bin/kscan
 
 %files
-%dir /opt/kscan
-%dir /opt/kscan/bin
-/opt/kscan/kscan.jar
-/opt/kscan/bin/kscan
+%dir /opt/kafka-message-scanner
+%dir /opt/kafka-message-scanner/bin
+/opt/kafka-message-scanner/kscan.jar
+/opt/kafka-message-scanner/bin/kscan
 /usr/bin/kscan
-%dir /etc/kscan
-%config(noreplace) /etc/kscan/scanner.properties
+%dir /etc/kafka-message-scanner
+%config(noreplace) /etc/kafka-message-scanner/scanner.properties
 
 %changelog
-* Mon Oct 12 2026 kscan maintainers <kung_jocke@hotmail.com> - %{_version}-1
+* Mon Oct 12 2026 kafka-message-scanner maintainers <kung_jocke@hotmail.com> - %{_version}-1
 - See the project README/plan for phase-by-phase history; this spec does
   not track a line-by-line changelog.

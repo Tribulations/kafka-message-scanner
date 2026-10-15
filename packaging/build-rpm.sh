@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds target/rpmbuild/RPMS/noarch/kscan-<version>-1.noarch.rpm from the
+# Builds target/rpmbuild/RPMS/noarch/kafka-message-scanner-<version>-1.noarch.rpm from the
 # current source tree. VERSION (repo root) is the single source of truth for
 # the version number -- this script is the only place that needs to read it;
 # see pom.xml's "revision" property comment for why a plain "mvn package"
@@ -50,7 +50,7 @@ cp packaging/scanner.properties "$topdir/SOURCES/scanner.properties"
 rpmbuild \
     --define "_topdir $topdir" \
     --define "_version $version" \
-    -bb packaging/kscan.spec
+    -bb packaging/kafka-message-scanner.spec
 
 echo
 echo "kscan: RPM(s) built:"

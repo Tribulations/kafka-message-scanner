@@ -45,7 +45,7 @@ final class KscanCli {
             + "                        to pace); errors with --output=distinct or --list-topics\n"
             + "                        e.g. --follow --delay=500   (watch live traffic at a readable pace)\n"
             + "  --config=<path>       path to scanner.properties (default: next to the jar)\n"
-            + "                        e.g. --config=/etc/kscan/scanner.properties\n"
+            + "                        e.g. --config=/etc/kafka-message-scanner/scanner.properties\n"
             + "  --list-topics         list topic names visible on the cluster and exit (no --topic= needed)\n"
             + "  --kafka.<prop>=<val>  arbitrary Kafka client property, e.g. --kafka.bootstrap.servers=host:9092\n"
             + "                        for SASL/Kerberos: --kafka.security.protocol=SASL_PLAINTEXT\n"

@@ -105,16 +105,21 @@ need to re-vendor) if that happens before `build-rpm.sh` runs.
 
 ```bash
 ./packaging/build-rpm.sh
-# -> target/rpmbuild/RPMS/noarch/kscan-<version>-1.noarch.rpm
+# -> target/rpmbuild/RPMS/noarch/kafka-message-scanner-<version>-1.noarch.rpm
 ```
+
+The RPM package name is descriptive (`kafka-message-scanner`) so the tool
+is easy to find via `rpm -qa`/`dnf search` on a host where it's already
+installed — the command it installs stays the short `kscan`, since that's
+what actually gets typed repeatedly during ad-hoc debugging.
 
 Installs to:
 
 ```
-/opt/kscan/kscan.jar
-/opt/kscan/bin/kscan           <- wrapper script (see below)
-/usr/bin/kscan                 <- symlink to the above, for PATH convenience
-/etc/kscan/scanner.properties  <- default config, %config(noreplace)
+/opt/kafka-message-scanner/kscan.jar
+/opt/kafka-message-scanner/bin/kscan           <- wrapper script (see below)
+/usr/bin/kscan                                 <- symlink to the above, for PATH convenience
+/etc/kafka-message-scanner/scanner.properties  <- default config, %config(noreplace)
 ```
 
 No `Requires` on a Java package — target hosts are expected to already
@@ -140,11 +145,12 @@ actually lives:
   rejects something *older* than Java 8, or a version string it can't parse
   at all, with exit 2 and a clear message — never silently runs under an
   unverified version either way, no matter which of the above found it.
-- Injects `--config=/etc/kscan/scanner.properties` only if that file exists
-  and the caller didn't already pass their own `--config=` — this is what
-  bridges the jar's own "look next to me" default (meant for local dev,
-  where the jar and config sit together in `target/`) to the RPM's layout,
-  where the config lives in `/etc/kscan` while the jar lives in `/opt/kscan`.
+- Injects `--config=/etc/kafka-message-scanner/scanner.properties` only if
+  that file exists and the caller didn't already pass their own `--config=`
+  — this is what bridges the jar's own "look next to me" default (meant for
+  local dev, where the jar and config sit together in `target/`) to the
+  RPM's layout, where the config lives in `/etc/kafka-message-scanner`
+  while the jar lives in `/opt/kafka-message-scanner`.
 - Uses `exec` (not a plain subshell call) so the JVM's real exit code and
   SIGTERM handling pass straight through the wrapper untouched.
 
@@ -608,7 +614,7 @@ file path, or `<none>` if no file was actually read) — so "N matched" is
 always attributable to an exact, visible set of settings, never a guess:
 
 ```
-kscan: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest limit=50 output=pretty config=/opt/kscan/scanner.properties
+kscan: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest limit=50 output=pretty config=/opt/kafka-message-scanner/scanner.properties
 kscan: 50 matched on topic=orders limit=50 bootstrap.servers=localhost:9092
 ```
 
@@ -687,7 +693,7 @@ handling (exit 2 in each case); its default-`--config=`-injection logic
 otherwise falls through to the jar's own default, never overrides an
 explicit `--config=`); and the full RPM lifecycle in a container with a
 real `java-1.8.0-openjdk-headless` install — a clean `rpm -ivh` install and
-end-to-end scan, an edited `/etc/kscan/scanner.properties` surviving an
+end-to-end scan, an edited `/etc/kafka-message-scanner/scanner.properties` surviving an
 `rpm -Uvh` upgrade untouched (the new default appears alongside as
 `.rpmnew` once the template actually changes), and a clean `rpm -e` leaving
 no stray files or directories. `rpm -qlpv`/`rpm -qp --requires` confirm the
@@ -722,7 +728,8 @@ src/main/java/kscan/
   output/                output writers: pretty, json (NDJSON), count
 src/test/java/kscan/     unit tests (MockConsumer-based)
 bin/kscan                wrapper script: resolves Java 8+, injects default --config=, execs the jar
-packaging/kscan.spec     RPM spec: installs to /opt/kscan, /etc/kscan, a /usr/bin symlink
+packaging/kafka-message-scanner.spec   RPM spec (package name is descriptive; installed command stays "kscan"):
+                         installs to /opt/kafka-message-scanner, /etc/kafka-message-scanner, a /usr/bin symlink
 packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
 packaging/scanner.properties   neutral config template the RPM ships (topic/bootstrap.servers commented out)
 packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 class in the shaded jar

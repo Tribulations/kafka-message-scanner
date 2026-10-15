@@ -7,11 +7,13 @@
 # Java resolution order: $KSCAN_JAVA_HOME, then /etc/alternatives/java, then
 # $PATH, then two hardcoded Java-8-specific fallback paths as a last resort.
 #
-# Expected install layout (see packaging/kscan.spec):
-#   /opt/kscan/kscan.jar
-#   /opt/kscan/bin/kscan          <- this script
-#   /usr/bin/kscan                <- symlink to the above, for PATH convenience
-#   /etc/kscan/scanner.properties <- default config (RPM-managed, %config(noreplace))
+# Expected install layout (see packaging/kafka-message-scanner.spec -- the
+# RPM package name is descriptive for discoverability, but the command it
+# installs stays the short "kscan"):
+#   /opt/kafka-message-scanner/kscan.jar
+#   /opt/kafka-message-scanner/bin/kscan          <- this script
+#   /usr/bin/kscan                                <- symlink to the above, for PATH convenience
+#   /etc/kafka-message-scanner/scanner.properties <- default config (RPM-managed, %config(noreplace))
 set -euo pipefail
 
 # Last-resort fallback paths, tried only if /etc/alternatives/java and $PATH
@@ -25,7 +27,7 @@ DEFAULT_JAVA_HOME_CANDIDATES=(
     "/usr/lib/jvm/java-1.8.0-openjdk"
     "/usr/lib/jvm/jre-1.8.0-openjdk"
 )
-DEFAULT_CONFIG="/etc/kscan/scanner.properties"
+DEFAULT_CONFIG="/etc/kafka-message-scanner/scanner.properties"
 
 # readlink -f follows the /usr/bin/kscan symlink to its real location before
 # deriving the install directory -- a bare "dirname "$0"" would instead
@@ -116,7 +118,7 @@ fi
 # Only inject the RPM-installed default config if the caller didn't already
 # pass their own --config= and that default actually exists -- this keeps the
 # wrapper working when it's copied/tested outside of an RPM install too (no
-# /etc/kscan, so kscan.jar's own install-relative lookup takes over instead).
+# /etc/kafka-message-scanner, so kscan.jar's own install-relative lookup takes over instead).
 config_args=()
 if [ -f "$DEFAULT_CONFIG" ]; then
     has_config_flag=0
