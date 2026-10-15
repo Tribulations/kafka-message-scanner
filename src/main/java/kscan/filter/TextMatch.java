@@ -2,7 +2,11 @@ package kscan.filter;
 
 import java.util.Locale;
 
-/** Shared matching rule for match.key/match.header: case-insensitive substring by default. */
+/**
+ * Shared matching rule for match.key/match.header: case-insensitive substring by default. Used by
+ * {@link KeyFilter} and {@link HeaderFilter}; {@link FieldFilter} has its own separate
+ * {@code path=value}/{@code path!=value}/{@code path~regex} mini-language instead.
+ */
 final class TextMatch {
 
     private TextMatch() {

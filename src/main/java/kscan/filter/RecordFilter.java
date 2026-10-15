@@ -4,7 +4,11 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
 
-/** A predicate over a raw Kafka record. Implementations must never throw on malformed input. */
+/**
+ * A predicate over a raw Kafka record. Implementations must never throw on malformed input --
+ * {@link KeyFilter}, {@link HeaderFilter}, {@link FieldFilter}; built and ANDed together by
+ * {@link RecordFilterFactory}.
+ */
 public interface RecordFilter {
 
     /** @return true if the record matches this filter. */

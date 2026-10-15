@@ -32,7 +32,7 @@ public final class DistinctSpec {
     /**
      * Parses a raw --distinct value.
      *
-     * @throws IllegalArgumentException if it's none of "key", "header:<name>", or "field:<path>".
+     * @throws IllegalArgumentException if it's none of "key", "header:&lt;name&gt;", or "field:&lt;path&gt;".
      */
     public static DistinctSpec parse(String raw) {
         if ("key".equalsIgnoreCase(raw)) {

@@ -12,6 +12,7 @@ import java.util.Set;
  * Loads the scanner's properties file and rejects unknown keys at startup --
  * an unrecognized key is a hard error here, same reasoning as the strict CLI
  * parser (a typo'd key must never silently fall back to a wrong default).
+ * Used by {@link FileDefaults}, the only caller.
  */
 public final class PropertiesFileLoader {
 

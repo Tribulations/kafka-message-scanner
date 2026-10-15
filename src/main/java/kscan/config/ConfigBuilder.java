@@ -13,8 +13,8 @@ import java.util.Properties;
 
 /**
  * Merges config file, environment variables (SCANNER_*), and CLI flags into
- * one validated {@link ScannerConfig}. Precedence: file defaults < env
- * overrides < CLI (CLI always wins), so an operator can override anything
+ * one validated {@link ScannerConfig}. Precedence: file defaults &lt; env
+ * overrides &lt; CLI (CLI always wins), so an operator can override anything
  * from the file without editing it -- important for a tool meant to be
  * tweaked live during an incident.
  *

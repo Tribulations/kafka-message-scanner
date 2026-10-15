@@ -11,7 +11,11 @@ import kscan.scan.StartPosition;
 import java.util.Properties;
 import java.util.Set;
 
-/** Wires CLI parsing, config, the Kafka consumer, and the scan engine together for one run. */
+/**
+ * Wires CLI parsing, config, the Kafka consumer, and the scan engine together for one run:
+ * {@link KscanCli} parses args, {@link StartupPipeline} turns the resulting config into validated
+ * typed pieces, and {@link ScanRunner} does the actual consumer/scan work.
+ */
 final class KscanApp {
 
     private KscanApp() {

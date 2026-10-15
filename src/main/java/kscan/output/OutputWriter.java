@@ -5,7 +5,11 @@ import kscan.scan.ScanResult;
 
 import java.io.PrintStream;
 
-/** Writes scan output to stdout. Implementations must write ONLY the promised output -- nothing else. */
+/**
+ * Writes scan output to stdout. Implementations must write ONLY the promised output -- nothing
+ * else. One per {@link OutputMode}: {@link PrettyOutputWriter}, {@link JsonOutputWriter},
+ * {@link CountOutputWriter}, {@link DistinctOutputWriter}.
+ */
 public interface OutputWriter {
 
     /** Writes {@code result} to {@code stdout} in this writer's format. */

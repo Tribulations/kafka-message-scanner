@@ -24,7 +24,8 @@ import java.util.TreeSet;
 /**
  * Given built Kafka properties and validated config, does the actual list-topics or scan work:
  * opens the consumer, manages its lifecycle and shutdown coordination, and maps the outcome to
- * an exit code.
+ * an exit code. Delegates the actual poll loop to {@link ScanEngine}, and builds its stderr
+ * summary/warning lines via {@link RunSummary} and {@link ScanRiskWarnings}.
  */
 final class ScanRunner {
 
