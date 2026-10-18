@@ -33,10 +33,12 @@ rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/kafka-message-scanner/bin
 mkdir -p %{buildroot}/etc/kafka-message-scanner
 mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}%{_mandir}/man1
 
 install -m 0644 %{_sourcedir}/kscan.jar %{buildroot}/opt/kafka-message-scanner/kscan.jar
 install -m 0755 %{_sourcedir}/kscan %{buildroot}/opt/kafka-message-scanner/bin/kscan
 install -m 0644 %{_sourcedir}/scanner.properties %{buildroot}/etc/kafka-message-scanner/scanner.properties
+install -m 0644 %{_sourcedir}/kscan.1 %{buildroot}%{_mandir}/man1/kscan.1
 ln -sf ../../opt/kafka-message-scanner/bin/kscan %{buildroot}/usr/bin/kscan
 
 %files
@@ -47,6 +49,7 @@ ln -sf ../../opt/kafka-message-scanner/bin/kscan %{buildroot}/usr/bin/kscan
 /usr/bin/kscan
 %dir /etc/kafka-message-scanner
 %config(noreplace) /etc/kafka-message-scanner/scanner.properties
+%{_mandir}/man1/kscan.1*
 
 %changelog
 * Mon Oct 12 2026 kafka-message-scanner maintainers <kung_jocke@hotmail.com> - %{_version}-1

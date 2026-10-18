@@ -120,7 +120,14 @@ Installs to:
 /opt/kafka-message-scanner/bin/kscan           <- wrapper script (see below)
 /usr/bin/kscan                                 <- symlink to the above, for PATH convenience
 /etc/kafka-message-scanner/scanner.properties  <- default config, %config(noreplace)
+/usr/share/man/man1/kscan.1.gz                 <- `man kscan`: short synopsis + worked debugging examples
 ```
+
+`man kscan` is a third tier alongside `--help`/this README: it deliberately
+defers to `--help` for the full flag reference, and exists mainly for its
+EXAMPLES section (listing topics, targeted `--match.*` scans, time-bounded
+scans, `--follow`, `--output=distinct`) so it doesn't drift out of sync by
+re-documenting every flag a third time.
 
 No `Requires` on a Java package — target hosts are expected to already
 provision at least Java 8 out-of-band (confirmed via `rpm -qp --requires`

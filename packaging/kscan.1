@@ -1,0 +1,129 @@
+.TH KSCAN 1 "2026-10-18" "kafka-message-scanner" "User Commands"
+.SH NAME
+kscan \- scan a Kafka topic for messages matching a key, header, or JSON field value
+.SH SYNOPSIS
+.B kscan
+.B \-\-topic=\fIname\fR
+[\fIoptions\fR]
+.SH DESCRIPTION
+.B kscan
+is a debugging/analysis CLI that answers "did this message land in this
+topic, and what does it look like?" against a real Kafka cluster. It is
+read-only: it never joins a consumer group and never commits offsets, so it
+is safe to run against production topics without affecting any real
+consumer.
+.PP
+This page gives a short synopsis and a set of worked debugging examples.
+For the authoritative, complete list of flags, their accepted values, and
+the exact error each one produces on a bad input, run:
+.PP
+.RS
+.B kscan \-\-help
+.RE
+.PP
+A bare run with no config file anywhere still works and defaults to
+scanning the 50 oldest messages on the given topic
+(\fB\-\-limit=50 \-\-from=earliest\fR); every default is overridable via the
+config file, a \fBSCANNER_*\fR environment variable, or a CLI flag, in that
+order of precedence (CLI always wins).
+.SH EXAMPLES
+.TP
+See what topics exist on the cluster
+.RS
+.EX
+kscan \-\-list\-topics
+.EE
+.RE
+.TP
+Learn a topic's shape with an unfiltered sample, oldest messages first
+.RS
+.EX
+kscan \-\-topic=orders \-\-limit=50
+.EE
+.RE
+.TP
+Scan for a specific key/header/field value
+.RS
+.EX
+kscan \-\-topic=orders \-\-match.field=status=ERROR
+kscan \-\-topic=orders \-\-match.key=CUST\-106
+kscan \-\-topic=orders \-\-match.header=source=mobile
+.EE
+.RE
+.TP
+Look at only the last hour, instead of from the beginning
+.RS
+.EX
+kscan \-\-topic=orders \-\-from="$(date \-d '1 hour ago' '+%Y\-%m\-%d %H:%M:%S')" \-\-limit=50
+.EE
+.RE
+.TP
+Bound a scan to a specific time window (both ends)
+.RS
+.EX
+kscan \-\-topic=orders \-\-from="2026\-10\-15 09:00:00" \-\-until="2026\-10\-15 10:00:00"
+.EE
+.RE
+.TP
+Tail a topic live, like \fItail \-f\fR, starting from now
+.RS
+.EX
+kscan \-\-topic=orders \-\-from=latest \-\-follow
+.EE
+.RE
+.TP
+Jump straight to a known offset on one partition, instead of scanning for it
+.RS
+.EX
+kscan \-\-topic=orders \-\-partition=0 \-\-from=offset:2309 \-\-limit=1
+.EE
+.RE
+.TP
+Quick cardinality check before handing off to Kibana/downstream aggregation
+.RS
+.EX
+kscan \-\-topic=orders \-\-output=distinct \-\-distinct=header:source
+kscan \-\-topic=orders \-\-output=distinct \-\-distinct=field:status \-\-match.field=status=ERROR
+.EE
+.RE
+.TP
+Pipe to \fIjq\fR for ad-hoc field inspection
+.RS
+.EX
+kscan \-\-topic=orders \-\-output=json \-\-limit=20 | jq '.value.status'
+.EE
+.RE
+.SH FILES
+.TP
+.I /etc/kafka-message-scanner/scanner.properties
+Default config file on an RPM install (\fB%config(noreplace)\fR \- edits
+survive an upgrade). A missing default config file is not an error; only an
+explicitly given \fB\-\-config=\fR/\fBSCANNER_CONFIG\fR path that doesn't
+exist is.
+.SH ENVIRONMENT
+Every scalar flag has a matching \fBSCANNER_*\fR override (e.g.
+\fBSCANNER_TOPIC\fR, \fBSCANNER_FROM\fR, \fBSCANNER_UNTIL\fR,
+\fBSCANNER_LIMIT\fR, \fBSCANNER_OUTPUT\fR, \fBSCANNER_FOLLOW\fR), plus the
+open-ended \fBSCANNER_KAFKA_<NAME>\fR / \fBSCANNER_JVM_<NAME>\fR passthrough
+namespaces for Kafka client properties and JVM system properties
+respectively (dots become underscores, e.g.
+\fBSCANNER_KAFKA_BOOTSTRAP_SERVERS\fR). See \fBkscan \-\-help\fR for the full
+set.
+.TP
+.B KSCAN_JAVA_HOME
+Overrides the Java runtime the \fBkscan\fR wrapper script uses, taking
+priority over \fB/etc/alternatives/java\fR, \fB$PATH\fR, and the built-in
+fallback paths.
+.SH EXIT STATUS
+.TP
+.B 0
+At least one match found.
+.TP
+.B 1
+Ran cleanly, zero matches.
+.TP
+.B 2
+Error (bad config/args, topic doesn't exist, broker unreachable, etc.).
+.SH SEE ALSO
+.B kscan \-\-help
+for the complete flag reference.

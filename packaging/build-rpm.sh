@@ -46,6 +46,7 @@ cp bin/kscan "$topdir/SOURCES/kscan"
 # host has no safe guess for either, so the RPM ships a neutral template
 # with both commented out, forcing an explicit --topic=/--config= choice.
 cp packaging/scanner.properties "$topdir/SOURCES/scanner.properties"
+cp packaging/kscan.1 "$topdir/SOURCES/kscan.1"
 
 rpmbuild \
     --define "_topdir $topdir" \
