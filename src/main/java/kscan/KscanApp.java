@@ -58,7 +58,7 @@ final class KscanApp {
     private static void reportExit(ExitSignal e) {
         System.err.println("error: " + e.getMessage());
         if (e.showUsage) {
-            System.err.println("Run 'kscan --help' for usage.");
+            System.err.println("Run 'kafka-scanner --help' for usage.");
         }
     }
 }

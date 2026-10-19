@@ -1,4 +1,4 @@
-# kscan
+# kafka-scanner
 
 A standalone command-line tool to answer one question fast: *"did a specific
 message make it into this Kafka topic, and if so, what does it look like?"*
@@ -82,7 +82,7 @@ dependencies once on a networked machine and carry them over:
 
 Transfer two things to the air-gapped host, however you already move files
 there (internal mirror, USB, approved transfer process — not something
-kscan itself handles): the project repo itself, and
+kafka-scanner itself handles): the project repo itself, and
 `target/offline-repo.tar.gz`. On the air-gapped host, extract the tarball
 so its contents land at `target/offline-repo` inside the repo, then run
 `build-rpm.sh` exactly as normal:
@@ -110,31 +110,40 @@ need to re-vendor) if that happens before `build-rpm.sh` runs.
 
 The RPM package name is descriptive (`kafka-message-scanner`) so the tool
 is easy to find via `rpm -qa`/`dnf search` on a host where it's already
-installed — the command it installs stays the short `kscan`, since that's
-what actually gets typed repeatedly during ad-hoc debugging.
+installed, and the command it installs is `kafka-scanner` — not the
+shorter `kscan` used earlier in this project, since that read as one more
+short Kerberos `k`-tool next to `kinit`/`klist`/`kdestroy`. `kafka-scanner`
+also matches the naming convention of Kafka's own official CLI tools
+(`kafka-topics`, `kafka-console-consumer`, `kafka-consumer-groups`, ...),
+which makes it recognizable as a Kafka tool at a glance.
 
 Installs to:
 
 ```
 /opt/kafka-message-scanner/kscan.jar
-/opt/kafka-message-scanner/bin/kscan           <- wrapper script (see below)
-/usr/bin/kscan                                 <- symlink to the above, for PATH convenience
+/opt/kafka-message-scanner/bin/kafka-scanner   <- wrapper script (see below)
+/usr/bin/kafka-scanner                         <- symlink to the above, for PATH convenience
 /etc/kafka-message-scanner/scanner.properties  <- default config, %config(noreplace)
-/usr/share/man/man1/kscan.1.gz                 <- `man kscan`: short synopsis + worked debugging examples
+/usr/share/man/man1/kafka-scanner.1.gz         <- `man kafka-scanner`: short synopsis + worked debugging examples
 ```
 
-`man kscan` is a third tier alongside `--help`/this README: it deliberately
-defers to `--help` for the full flag reference, and exists mainly for its
-EXAMPLES section (listing topics, targeted `--match.*` scans, time-bounded
-scans, `--follow`, `--output=distinct`) so it doesn't drift out of sync by
-re-documenting every flag a third time.
+(The jar file itself keeps the internal name `kscan.jar` — it's always
+invoked as an argument to `java -jar ...`, never typed as a bare command, so
+it carries none of the Kerberos-confusion risk the command rename above is
+solving.)
+
+`man kafka-scanner` is a third tier alongside `--help`/this README: it
+deliberately defers to `--help` for the full flag reference, and exists
+mainly for its EXAMPLES section (listing topics, targeted `--match.*` scans,
+time-bounded scans, `--follow`, `--output=distinct`) so it doesn't drift out
+of sync by re-documenting every flag a third time.
 
 No `Requires` on a Java package — target hosts are expected to already
 provision at least Java 8 out-of-band (confirmed via `rpm -qp --requires`
-on the built RPM). `bin/kscan` is the only thing that cares where Java
-actually lives:
+on the built RPM). `bin/kafka-scanner` is the only thing that cares where
+Java actually lives:
 
-- Resolves a Java runtime, in order: `$KSCAN_JAVA_HOME` env var, else
+- Resolves a Java runtime, in order: `$KAFKA_SCANNER_JAVA_HOME` env var, else
   `/etc/alternatives/java` (the RHEL/Debian alternatives system's symlink
   to whatever Java the host's package manager/admin has configured as the
   system default, regardless of vendor/version), else whatever `java`
@@ -148,10 +157,10 @@ actually lives:
   refused as long as `alternatives` or `$PATH` can find it.
   **Java 8 is a floor, not an exact requirement** — the jar is compiled to
   Java 8 bytecode specifically so it also runs on anything newer (9, 11,
-  17, 21, ...), which the JVM has always guaranteed. `bin/kscan` only
-  rejects something *older* than Java 8, or a version string it can't parse
-  at all, with exit 2 and a clear message — never silently runs under an
-  unverified version either way, no matter which of the above found it.
+  17, 21, ...), which the JVM has always guaranteed. `bin/kafka-scanner`
+  only rejects something *older* than Java 8, or a version string it can't
+  parse at all, with exit 2 and a clear message — never silently runs under
+  an unverified version either way, no matter which of the above found it.
 - Injects `--config=/etc/kafka-message-scanner/scanner.properties` only if
   that file exists and the caller didn't already pass their own `--config=`
   — this is what bridges the jar's own "look next to me" default (meant for
@@ -162,14 +171,14 @@ actually lives:
   SIGTERM handling pass straight through the wrapper untouched.
 
 ```bash
-kscan --topic=orders --follow --from=latest
-KSCAN_JAVA_HOME=/opt/vendor-jdk8 kscan --list-topics
-KSCAN_JAVA_HOME=/usr/lib/jvm/java-21-openjdk kscan --list-topics  # newer than 8 works fine too
+kafka-scanner --topic=orders --follow --from=latest
+KAFKA_SCANNER_JAVA_HOME=/opt/vendor-jdk8 kafka-scanner --list-topics
+KAFKA_SCANNER_JAVA_HOME=/usr/lib/jvm/java-21-openjdk kafka-scanner --list-topics  # newer than 8 works fine too
 ```
 
 ## Usage
 
-Run via the installed `kscan` wrapper (see above), or the jar directly:
+Run via the installed `kafka-scanner` wrapper (see above), or the jar directly:
 
 ```bash
 java -jar target/kscan.jar --topic=<name> [options]
@@ -180,7 +189,7 @@ java -jar target/kscan.jar --topic=<name> [options]
 `scanner.properties` at the project root already defaults `topic=kc-hello`,
 `from=earliest`, `limit=50`, and `kafka.bootstrap.servers=localhost:9092`
 for this project's own local test broker, and the build copies it next to
-the jar (`target/scanner.properties`) so kscan's install-relative default
+the jar (`target/scanner.properties`) so kafka-scanner's install-relative default
 config lookup finds it with **no `--config=` flag needed**:
 
 ```bash
@@ -189,7 +198,7 @@ java -jar target/kscan.jar
 
 `limit=50` is there so a zero-flag run never silently reads an entire
 large topic — see [stdout / stderr contract](#stdout--stderr-contract) for
-how kscan always shows you the limit actually in effect, so a capped
+how kafka-scanner always shows you the limit actually in effect, so a capped
 result is never mistaken for a complete one. This is the **one** default,
 whether or not a config file is present or complete — there's no separate
 "unlimited" fallback for a bare install with no `scanner.properties`.
@@ -310,7 +319,7 @@ file or default already gave it.
 sorted topic names to stdout (one per line), and exits 0 — `--topic=` is not
 required (and is ignored if given alongside it). Same fail-fast behavior as a
 scan: an unreachable broker still exits 2 within the short timeout rather
-than hanging, and prints a `kscan: connecting to bootstrap.servers=...`
+than hanging, and prints a `kafka-scanner: connecting to bootstrap.servers=...`
 line up front first, so it's clear what it was even trying to reach.
 
 ```bash
@@ -321,7 +330,7 @@ java -jar target/kscan.jar --list-topics
 
 `--follow` turns a bounded scan into an unbounded one: instead of stopping
 once every assigned partition reaches the offset it was at when the scan
-started, kscan keeps polling and streams each match to stdout as soon as
+started, kafka-scanner keeps polling and streams each match to stdout as soon as
 it's found (not batched until the end, since the scan may never end on its
 own). Combine it with `--from=latest` to only see records produced from now
 on, like `tail -f`, or `--from=earliest` to replay everything first and then
@@ -331,7 +340,7 @@ keep following — `--follow` doesn't change what `--from=` means.
 java -jar target/kscan.jar --topic=orders --from=latest --follow
 ```
 
-Stop it with Ctrl-C (or `SIGTERM`) — kscan catches both, prints the same
+Stop it with Ctrl-C (or `SIGTERM`) — kafka-scanner catches both, prints the same
 summary line and exit code (0/1/2) a bounded scan would, and does **not**
 exit with the shell's default 128+signal code. A quiet topic never triggers
 the stall-failure that a bounded scan would (an idle topic is exactly what
@@ -346,7 +355,7 @@ entirely inside each output mode's own final write step, with no
 per-record moment outside it to pace, and `--output=distinct`/
 `--list-topics` never print per-record output at all — combining
 `--delay=` with any of those is a conflict (exit 2), not a silent no-op.
-When active, kscan also pins `max.poll.records=1` (unless you've already
+When active, kafka-scanner also pins `max.poll.records=1` (unless you've already
 set your own) — otherwise a single poll against a busy topic could return
 a whole batch, and pacing through an entire batch sequentially would make
 Ctrl-C take much longer than expected to actually stop anything.
@@ -357,7 +366,7 @@ java -jar target/kscan.jar --topic=orders --follow --delay=500
 
 ### Restricting to one partition
 
-By default kscan scans every partition of a topic, interleaved as the
+By default kafka-scanner scans every partition of a topic, interleaved as the
 broker returns records — Kafka only guarantees ordering *within* a
 partition, never across them, so the order you see mixes several
 independent sequences. `--partition=<n>` restricts the scan (and `--follow`)
@@ -544,7 +553,7 @@ java -jar target/kscan.jar --topic=kc-orders --match.field=ts~^2026-10-22
 
 See [`scanner.properties`](scanner.properties) for every key, fully
 commented with its purpose, valid values, and default (or why it has none).
-The file is entirely optional — kscan runs fine with no file at all, as
+The file is entirely optional — kafka-scanner runs fine with no file at all, as
 long as `--topic=` and `--kafka.bootstrap.servers=` are supplied some other
 way.
 
@@ -632,12 +641,12 @@ file path, or `<none>` if no file was actually read) — so "N matched" is
 always attributable to an exact, visible set of settings, never a guess:
 
 ```
-kscan: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest limit=50 output=pretty config=/opt/kafka-message-scanner/scanner.properties
-kscan: 50 matched on topic=orders limit=50 bootstrap.servers=localhost:9092
+kafka-scanner: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest limit=50 output=pretty config=/opt/kafka-message-scanner/scanner.properties
+kafka-scanner: 50 matched on topic=orders limit=50 bootstrap.servers=localhost:9092
 ```
 
-Right after the connecting line, kscan also prints a non-blocking
-`kscan: WARNING: ...` line (still stderr-only) for a couple of scan
+Right after the connecting line, kafka-scanner also prints a non-blocking
+`kafka-scanner: WARNING: ...` line (still stderr-only) for a couple of scan
 shapes that can be very costly against a huge production cluster: an
 unbounded (`--limit=0`) scan from `earliest` across every partition, and
 a very large `--limit` (100,000+) combined with a buffering output mode
@@ -701,9 +710,9 @@ broker, the zero-match exit code, stdout/stderr separation, `--list-topics`,
 exit code, both alone and combined with `--limit`), `--output=json`,
 `--output=count`, `--match.field` (Jackson), and `--limit`.
 
-`bin/kscan` and the built RPM are verified the same way: both a real Java 8
-runtime and a newer one (JDK 21) running the wrapper through the
-`/usr/bin/kscan` symlink and the RPM's actual extracted contents, confirming
+`bin/kafka-scanner` and the built RPM are verified the same way: both a real
+Java 8 runtime and a newer one (JDK 21) running the wrapper through the
+`/usr/bin/kafka-scanner` symlink and the RPM's actual extracted contents, confirming
 Java 8 is accepted as a floor, not an exact requirement; the wrapper's
 too-old-Java rejection, unparseable-version rejection, and missing-Java
 handling (exit 2 in each case); its default-`--config=`-injection logic
@@ -717,7 +726,7 @@ end-to-end scan, an edited `/etc/kafka-message-scanner/scanner.properties` survi
 no stray files or directories. `rpm -qlpv`/`rpm -qp --requires` confirm the
 file list, permissions, and that no `java` dependency is declared;
 `rpm -qa`/`dnf search` confirm the package is actually findable by
-`kafka`, the point of its descriptive name, while `kscan` stays the
+`kafka`, the point of its descriptive name, with `kafka-scanner` as the
 installed command. The offline/air-gapped build path
 (`packaging/vendor-dependencies.sh` + `build-rpm.sh`'s auto-detected
 offline mode) was verified by physically hiding this machine's real
@@ -740,7 +749,7 @@ kafka_client_jaas.conf.example   external JAAS file example for Kerberos
 src/main/java/kscan/
   Main.java                 entry point only: System.exit(KscanApp.run(args))
   KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics -> exit code
-  KscanCli.java             kscan's flag schema, --help text, and CLI parsing wiring
+  KscanCli.java             kafka-scanner's flag schema, --help text, and CLI parsing wiring
   StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/filter/etc.
   ScanRunner.java           opens the consumer, runs the scan or --list-topics, reports the result
   RunSummary.java           builds the stderr connecting/result summary lines ScanRunner prints
@@ -754,8 +763,8 @@ src/main/java/kscan/
   filter/                match.key/match.header/match.field filters, ANDed together
   output/                output writers: pretty, json (NDJSON), count
 src/test/java/kscan/     unit tests (MockConsumer-based)
-bin/kscan                wrapper script: resolves Java 8+, injects default --config=, execs the jar
-packaging/kafka-message-scanner.spec   RPM spec (package name is descriptive; installed command stays "kscan"):
+bin/kafka-scanner        wrapper script: resolves Java 8+, injects default --config=, execs the jar
+packaging/kafka-message-scanner.spec   RPM spec (package name is descriptive; installed command is "kafka-scanner"):
                          installs to /opt/kafka-message-scanner, /etc/kafka-message-scanner, a /usr/bin symlink
 packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
 packaging/vendor-dependencies.sh   vendors Maven dependencies for an offline/air-gapped RPM build
@@ -768,10 +777,11 @@ packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 c
 - No real GSSAPI/Kerberos round-trip test (see [SASL / Kerberos](#sasl--kerberos))
   — only the passthrough plumbing is verified, not an actual ticket exchange
   against a KDC.
-- `bin/kscan` now also checks `/etc/alternatives/java` and `$PATH` before
-  falling back to its two hardcoded RHEL/CentOS 7-/9-style paths, so most
-  hosts no longer need an override; if none of those find a usable Java,
-  set `KSCAN_JAVA_HOME` explicitly (check `ls /usr/lib/jvm` on that host).
+- `bin/kafka-scanner` now also checks `/etc/alternatives/java` and `$PATH`
+  before falling back to its two hardcoded RHEL/CentOS 7-/9-style paths, so
+  most hosts no longer need an override; if none of those find a usable
+  Java, set `KAFKA_SCANNER_JAVA_HOME` explicitly (check `ls /usr/lib/jvm` on
+  that host).
 - No execution timeout on a user-supplied `--match.field=path~regex`. A
   deliberately pathological pattern (catastrophic backtracking) could hang
   the process against real message content. This requires a specifically

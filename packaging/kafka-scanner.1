@@ -1,12 +1,12 @@
-.TH KSCAN 1 "2026-10-18" "kafka-message-scanner" "User Commands"
+.TH KAFKA-SCANNER 1 "2026-10-19" "kafka-message-scanner" "User Commands"
 .SH NAME
-kscan \- scan a Kafka topic for messages matching a key, header, or JSON field value
+kafka-scanner \- scan a Kafka topic for messages matching a key, header, or JSON field value
 .SH SYNOPSIS
-.B kscan
+.B kafka-scanner
 .B \-\-topic=\fIname\fR
 [\fIoptions\fR]
 .SH DESCRIPTION
-.B kscan
+.B kafka-scanner
 is a debugging/analysis CLI that answers "did this message land in this
 topic, and what does it look like?" against a real Kafka cluster. It is
 read-only: it never joins a consumer group and never commits offsets, so it
@@ -18,7 +18,7 @@ For the authoritative, complete list of flags, their accepted values, and
 the exact error each one produces on a bad input, run:
 .PP
 .RS
-.B kscan \-\-help
+.B kafka-scanner \-\-help
 .RE
 .PP
 A bare run with no config file anywhere still works and defaults to
@@ -31,66 +31,66 @@ order of precedence (CLI always wins).
 See what topics exist on the cluster
 .RS
 .EX
-kscan \-\-list\-topics
+kafka-scanner \-\-list\-topics
 .EE
 .RE
 .TP
 Learn a topic's shape with an unfiltered sample, oldest messages first
 .RS
 .EX
-kscan \-\-topic=orders \-\-limit=50
+kafka-scanner \-\-topic=orders \-\-limit=50
 .EE
 .RE
 .TP
 Scan for a specific key/header/field value
 .RS
 .EX
-kscan \-\-topic=orders \-\-match.field=status=ERROR
-kscan \-\-topic=orders \-\-match.key=CUST\-106
-kscan \-\-topic=orders \-\-match.header=source=mobile
+kafka-scanner \-\-topic=orders \-\-match.field=status=ERROR
+kafka-scanner \-\-topic=orders \-\-match.key=CUST\-106
+kafka-scanner \-\-topic=orders \-\-match.header=source=mobile
 .EE
 .RE
 .TP
 Look at only the last hour, instead of from the beginning
 .RS
 .EX
-kscan \-\-topic=orders \-\-from="$(date \-d '1 hour ago' '+%Y\-%m\-%d %H:%M:%S')" \-\-limit=50
+kafka-scanner \-\-topic=orders \-\-from="$(date \-d '1 hour ago' '+%Y\-%m\-%d %H:%M:%S')" \-\-limit=50
 .EE
 .RE
 .TP
 Bound a scan to a specific time window (both ends)
 .RS
 .EX
-kscan \-\-topic=orders \-\-from="2026\-10\-15 09:00:00" \-\-until="2026\-10\-15 10:00:00"
+kafka-scanner \-\-topic=orders \-\-from="2026\-10\-15 09:00:00" \-\-until="2026\-10\-15 10:00:00"
 .EE
 .RE
 .TP
 Tail a topic live, like \fItail \-f\fR, starting from now
 .RS
 .EX
-kscan \-\-topic=orders \-\-from=latest \-\-follow
+kafka-scanner \-\-topic=orders \-\-from=latest \-\-follow
 .EE
 .RE
 .TP
 Jump straight to a known offset on one partition, instead of scanning for it
 .RS
 .EX
-kscan \-\-topic=orders \-\-partition=0 \-\-from=offset:2309 \-\-limit=1
+kafka-scanner \-\-topic=orders \-\-partition=0 \-\-from=offset:2309 \-\-limit=1
 .EE
 .RE
 .TP
 Quick cardinality check before handing off to Kibana/downstream aggregation
 .RS
 .EX
-kscan \-\-topic=orders \-\-output=distinct \-\-distinct=header:source
-kscan \-\-topic=orders \-\-output=distinct \-\-distinct=field:status \-\-match.field=status=ERROR
+kafka-scanner \-\-topic=orders \-\-output=distinct \-\-distinct=header:source
+kafka-scanner \-\-topic=orders \-\-output=distinct \-\-distinct=field:status \-\-match.field=status=ERROR
 .EE
 .RE
 .TP
 Pipe to \fIjq\fR for ad-hoc field inspection
 .RS
 .EX
-kscan \-\-topic=orders \-\-output=json \-\-limit=20 | jq '.value.status'
+kafka-scanner \-\-topic=orders \-\-output=json \-\-limit=20 | jq '.value.status'
 .EE
 .RE
 .SH FILES
@@ -107,13 +107,13 @@ Every scalar flag has a matching \fBSCANNER_*\fR override (e.g.
 open-ended \fBSCANNER_KAFKA_<NAME>\fR / \fBSCANNER_JVM_<NAME>\fR passthrough
 namespaces for Kafka client properties and JVM system properties
 respectively (dots become underscores, e.g.
-\fBSCANNER_KAFKA_BOOTSTRAP_SERVERS\fR). See \fBkscan \-\-help\fR for the full
-set.
+\fBSCANNER_KAFKA_BOOTSTRAP_SERVERS\fR). See \fBkafka-scanner \-\-help\fR for
+the full set.
 .TP
-.B KSCAN_JAVA_HOME
-Overrides the Java runtime the \fBkscan\fR wrapper script uses, taking
-priority over \fB/etc/alternatives/java\fR, \fB$PATH\fR, and the built-in
-fallback paths.
+.B KAFKA_SCANNER_JAVA_HOME
+Overrides the Java runtime the \fBkafka-scanner\fR wrapper script uses,
+taking priority over \fB/etc/alternatives/java\fR, \fB$PATH\fR, and the
+built-in fallback paths.
 .SH EXIT STATUS
 .TP
 .B 0
@@ -125,5 +125,5 @@ Ran cleanly, zero matches.
 .B 2
 Error (bad config/args, topic doesn't exist, broker unreachable, etc.).
 .SH SEE ALSO
-.B kscan \-\-help
+.B kafka-scanner \-\-help
 for the complete flag reference.

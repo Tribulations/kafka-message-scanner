@@ -8,14 +8,14 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * kscan's own specific command-line schema: which flags exist, the usage text describing them,
- * and the wiring that turns raw args into a validated {@link CliArgs}. Distinct from
+ * kafka-scanner's own specific command-line schema: which flags exist, the usage text describing
+ * them, and the wiring that turns raw args into a validated {@link CliArgs}. Distinct from
  * {@link CliArgs} itself, which is the generic, reusable strict parser this wraps.
  */
 final class KscanCli {
 
     static final String USAGE =
-            "Usage: kscan --topic=<name> [options]\n"
+            "Usage: kafka-scanner --topic=<name> [options]\n"
             + "\n"
             + "  --topic=<name>        topic to scan (required), e.g. --topic=orders\n"
             + "  --from=<pos>          starting Kafka offset/position to read from: earliest | latest |\n"
@@ -110,7 +110,7 @@ final class KscanCli {
     private KscanCli() {
     }
 
-    /** Parses {@code args} against kscan's known flag schema, or fails with a usage-printing {@link ExitSignal}. */
+    /** Parses {@code args} against kafka-scanner's known flag schema, or fails with a usage-printing {@link ExitSignal}. */
     static CliArgs parse(String[] args) throws ExitSignal {
         try {
             return CliArgs.parse(args, knownValueKeys(), knownBooleanKeys(), repeatableKeys());

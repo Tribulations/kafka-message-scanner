@@ -16,6 +16,6 @@ KafkaClient {
     com.sun.security.auth.module.Krb5LoginModule required
     useKeyTab=true
     storeKey=true
-    keyTab="/etc/kafka-message-scanner/kscan.keytab"
-    principal="kscan/your-host@YOUR-REALM.COM";
+    keyTab="/etc/kafka-message-scanner/kafka-scanner.keytab"
+    principal="kafka-scanner/your-host@YOUR-REALM.COM";
 };

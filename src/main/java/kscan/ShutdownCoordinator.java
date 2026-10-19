@@ -32,7 +32,7 @@ final class ShutdownCoordinator {
     }
 
     private void runHook() {
-        System.err.println("kscan: shutdown signal received, stopping...");
+        System.err.println("kafka-scanner: shutdown signal received, stopping...");
         consumer.wakeup();
         awaitFinishedQuietly();
         Runtime.getRuntime().halt(exitCode);
