@@ -11,7 +11,7 @@
 # k-tool next to kinit/klist/kdestroy.
 Name:           kafka-message-scanner
 Version:        %{_version}
-Release:        1%{?dist}
+Release:        2%{?dist }
 Summary:        Kafka topic/message scanner (debugging/analysis CLI)
 License:        Proprietary
 URL:            https://example.invalid/kafka-message-scanner
