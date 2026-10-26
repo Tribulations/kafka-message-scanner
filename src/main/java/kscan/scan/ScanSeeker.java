@@ -15,8 +15,8 @@ final class ScanSeeker {
     private ScanSeeker() {
     }
 
-    static void seekToStart(Consumer<byte[], byte[]> consumer, List<TopicPartition> partitions, StartPosition from)
-            throws ScanException {
+    static void seekToStart(Consumer<byte[], byte[]> consumer, List<TopicPartition> partitions, StartPosition from,
+                             boolean follow) throws ScanException {
         switch (from.kind()) {
             case EARLIEST:
                 consumer.seekToBeginning(partitions);
@@ -28,7 +28,7 @@ final class ScanSeeker {
                 seekToTimestamp(consumer, partitions, from.timestampMs());
                 break;
             case OFFSET:
-                seekToOffset(consumer, partitions, from.offset());
+                seekToOffset(consumer, partitions, from.offset(), follow);
                 break;
         }
     }
@@ -38,15 +38,38 @@ final class ScanSeeker {
      * offset is partition-relative. Checks the actual invariant (one partition assigned) rather
      * than "did the caller pass --partition=" as a proxy for it: a topic that genuinely has only
      * one partition can use this with no --partition= needed at all.
+     *
+     * <p>Also validates the offset against the partition's actual valid range -- seeking past it
+     * silently (the previous behavior) let the scan's own snapshot-end check mistake "not there"
+     * for "already done", reporting a false "0 matched" instead of an error (confirmed live: an
+     * offset far beyond the real end returned 0 matched/exit 1, indistinguishable from a
+     * legitimate empty result). An offset below the earliest retained offset is rejected
+     * unconditionally -- that data is gone (or never existed) and can never appear. An offset at
+     * or beyond the current end is rejected only for a bounded scan; with {@code --follow}, it's
+     * allowed on purpose -- "wait for message N to arrive" is a legitimate use, not a mistake.
      */
-    private static void seekToOffset(Consumer<byte[], byte[]> consumer, List<TopicPartition> partitions, long offset)
-            throws ScanException {
+    private static void seekToOffset(Consumer<byte[], byte[]> consumer, List<TopicPartition> partitions,
+                                      long offset, boolean follow) throws ScanException {
         if (partitions.size() != 1) {
             throw new ScanException(
                     "--from=offset:<n> requires scanning exactly one partition (use --partition=)");
         }
 
-        consumer.seek(partitions.get(0), offset);
+        TopicPartition tp = partitions.get(0);
+        long beginning = consumer.beginningOffsets(partitions).get(tp);
+        long end = consumer.endOffsets(partitions).get(tp);
+
+        if (offset < beginning) {
+            throw new ScanException("--from=offset:" + offset + " is before the earliest retained offset ("
+                    + beginning + ") on partition " + tp.partition() + " -- that data no longer exists (or never did)");
+        }
+        if (offset >= end && !follow) {
+            throw new ScanException("--from=offset:" + offset + " does not exist yet on partition "
+                    + tp.partition() + " (current end offset: " + end + ") -- use --follow to wait for it,"
+                    + " or pick an offset below " + end);
+        }
+
+        consumer.seek(tp, offset);
     }
 
     /** Seeks every partition to its first offset at/after {@code timestampMs}, or to its end if none exists. */

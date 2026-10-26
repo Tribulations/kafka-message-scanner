@@ -389,6 +389,36 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void rawOutputRequiresLimitOne(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--output=raw"), configFile, Collections.emptyMap()));
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--output=raw", "--limit=2"), configFile, Collections.emptyMap()));
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--output=raw", "--limit=1"), configFile, Collections.emptyMap());
+        assertEquals("raw", config.output());
+    }
+
+    @Test
+    void rawOutputConflictsWithListTopics(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--list-topics", "--output=raw", "--limit=1"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void rawOutputConflictsWithFollow(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--follow", "--output=raw", "--limit=1"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void configFileReflectsTheActualResolvedPathWhenOneWasUsed(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 

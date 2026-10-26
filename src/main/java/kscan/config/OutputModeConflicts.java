@@ -16,6 +16,7 @@ final class OutputModeConflicts {
         requireFieldsOnlyWithPrettyOutput(values, cli);
         requireDistinctAndOutputTogether(values, cli);
         requireDelayOnlyWithFollow(values, cli);
+        requireRawOutputConstraints(values, cli);
     }
 
     /**
@@ -98,6 +99,32 @@ final class OutputModeConflicts {
         if (values.output.equalsIgnoreCase("distinct")) {
             throw new ConfigLoadException(
                     "--delay has no effect with --output=distinct -- it never prints per-record output");
+        }
+    }
+
+    /**
+     * --output=raw prints a matched record's exact original value bytes with no envelope -- fine
+     * for exactly one record, but concatenated binary records would have no delimiter marking
+     * where one ends and the next begins (a silent corruption risk, not something to let run and
+     * hope for the best), so it's restricted to exactly --limit=1. Also conflicts with
+     * --list-topics (no records are ever printed there) and --follow (an unbounded stream of
+     * undelimited binary records is the same risk, just open-ended).
+     */
+    private static void requireRawOutputConstraints(ConfigBuilder.MutableValues values, CliArgs cli)
+            throws ConfigLoadException {
+        if (!values.output.equalsIgnoreCase("raw")) {
+            return;
+        }
+        if (cli.hasFlag("list-topics")) {
+            throw new ConfigLoadException("--output=raw has no effect with --list-topics -- give only one");
+        }
+        if (values.follow) {
+            throw new ConfigLoadException("--output=raw does not support --follow -- give one or the other");
+        }
+        if (values.limit != 1) {
+            throw new ConfigLoadException(
+                    "--output=raw requires --limit=1 (concatenated binary records have no delimiter "
+                            + "between them, so printing more than one would silently corrupt the output)");
         }
     }
 }

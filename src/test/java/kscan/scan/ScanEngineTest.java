@@ -230,6 +230,53 @@ class ScanEngineTest {
     }
 
     @Test
+    void exactOffsetMatchProducesNoWarning() throws Exception {
+        MockConsumer<byte[], byte[]> consumer = newAssignedConsumer(4L);
+        consumer.schedulePollTask(() -> {
+            consumer.addRecord(record(2, "c"));
+            consumer.addRecord(record(3, "d"));
+        });
+
+        ScanResult result = ScanEngine.scan(consumer, TOPIC, StartPosition.parse("offset:2"),
+                RecordFilter.matchAll(), 0);
+
+        assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
+    void offsetGapTriggersAWarningButStillProcessesTheNextAvailableRecord() throws Exception {
+        // Offset 2 is "missing" (standing in for a compaction/control-record gap) -- the next
+        // real record is at offset 3. ScanSeeker's own range check can't catch this (2 is still a
+        // valid offset for this partition), so this is ScanEngine's complementary first-record check.
+        MockConsumer<byte[], byte[]> consumer = newAssignedConsumer(5L);
+        consumer.schedulePollTask(() -> {
+            consumer.addRecord(record(0, "a"));
+            consumer.addRecord(record(1, "b"));
+            consumer.addRecord(record(3, "d"));
+            consumer.addRecord(record(4, "e"));
+        });
+
+        ScanResult result = ScanEngine.scan(consumer, TOPIC, StartPosition.parse("offset:2"),
+                RecordFilter.matchAll(), 0);
+
+        assertEquals(2, result.matchCount());
+        assertEquals(1, result.warnings().size());
+        assertTrue(result.warnings().get(0).contains("offset:2"));
+        assertTrue(result.warnings().get(0).contains("offset 3"));
+    }
+
+    @Test
+    void nonOffsetStartNeverProducesTheGapWarning() throws Exception {
+        MockConsumer<byte[], byte[]> consumer = newAssignedConsumer(1L);
+        consumer.schedulePollTask(() -> consumer.addRecord(record(0, "a")));
+
+        ScanResult result = ScanEngine.scan(consumer, TOPIC, StartPosition.parse("earliest"),
+                RecordFilter.matchAll(), 0);
+
+        assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
     void offsetSeekWithMoreThanOnePartitionAssignedThrowsScanException() {
         MockConsumer<byte[], byte[]> consumer = newTwoPartitionConsumer(0L, 0L);
 

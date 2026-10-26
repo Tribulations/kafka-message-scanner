@@ -422,10 +422,22 @@ summary lines are unaffected):
 - **`distinct`** — a value/count report for one field across every matching
   record, most frequent first (`mobile: 412`, `web: 98`, ...) — see
   [Distinct values](#distinct-values) below.
+- **`raw`** — the matched record's exact original value bytes, nothing
+  else: no UTF-8 decoding (which is lossy for non-UTF-8/binary payloads —
+  every other mode decodes the value as text, replacing any invalid byte
+  with U+FFFD, irreversibly), no envelope, no label. Requires exactly
+  `--limit=1` — concatenated binary records would have no delimiter marking
+  where one ends and the next begins, so more than one is a conflict (exit
+  2), not silent corruption. Also conflicts with `--follow` and
+  `--list-topics`, same reasoning. A tombstone (null value) writes zero
+  bytes. Useful for extracting one message exactly as produced — pipe to
+  `xxd` to inspect it, or to a schema-aware tool (`protoc --decode`, an
+  Avro deserializer, etc.) that needs the real bytes, not a decoded string.
 
 ```bash
 java -jar target/kscan.jar --topic=orders --output=json --limit=5 | jq .
 java -jar target/kscan.jar --topic=orders --output=count
+java -jar target/kscan.jar --topic=orders --partition=0 --from=offset:3801 --limit=1 --output=raw | xxd
 ```
 
 `--fields=<list>` restricts a **pretty** block to just the given

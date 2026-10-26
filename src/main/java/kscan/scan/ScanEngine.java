@@ -42,8 +42,11 @@ public final class ScanEngine {
     private List<TopicPartition> partitions;
     private Map<TopicPartition, Long> snapshotEnd;
     private final List<MatchedRecord> matches = new ArrayList<>();
+    private final List<String> warnings = new ArrayList<>();
     private long matchCount;
     private long lastProgressAt;
+    private Long expectedFirstOffset;
+    private boolean firstRecordChecked;
 
     private ScanEngine(Consumer<byte[], byte[]> consumer, RecordFilter filter, long limit, boolean follow,
                         boolean keepMatches, MatchHandler onMatch, Integer partition, Long until) {
@@ -122,7 +125,8 @@ public final class ScanEngine {
         partitions = PartitionResolver.resolve(consumer, topic, partition);
         consumer.assign(partitions);
         snapshotEnd = consumer.endOffsets(partitions);
-        ScanSeeker.seekToStart(consumer, partitions, from);
+        ScanSeeker.seekToStart(consumer, partitions, from, follow);
+        expectedFirstOffset = from.kind() == StartPosition.Kind.OFFSET ? from.offset() : null;
 
         lastProgressAt = System.currentTimeMillis();
         while (!isDone()) {
@@ -133,7 +137,7 @@ public final class ScanEngine {
             }
         }
 
-        return new ScanResult(matches, matchCount);
+        return new ScanResult(matches, matchCount, warnings);
     }
 
     /**
@@ -179,6 +183,8 @@ public final class ScanEngine {
 
     private void processRecords(ConsumerRecords<byte[], byte[]> polled) {
         for (ConsumerRecord<byte[], byte[]> record : polled) {
+            checkFirstRecordOffset(record);
+
             if (isBeyondSnapshot(record) || isAfterUntilBound(record)) {
                 continue; // beyond this bounded scan's snapshot, or past --until=; ignore but don't crash
             }
@@ -188,6 +194,29 @@ public final class ScanEngine {
             if (limitReached()) {
                 break;
             }
+        }
+    }
+
+    /**
+     * One-time check, only when seeking to a specific --from=offset:<n>: the very first record
+     * actually read might not be at that exact offset. {@link ScanSeeker#seekToStart} already
+     * rejects an offset outside the partition's valid range, but a compaction/control-record gap
+     * *within* that range isn't something a range check can catch -- Kafka's fetch mechanics just
+     * return the next available record instead, with no error. Surfaced as a warning, not an
+     * error: the record is still processed/matched normally, the caller just needs to know it
+     * isn't literally the one they asked for.
+     */
+    private void checkFirstRecordOffset(ConsumerRecord<byte[], byte[]> record) {
+        if (firstRecordChecked || expectedFirstOffset == null) {
+            return;
+        }
+        firstRecordChecked = true;
+
+        if (record.offset() != expectedFirstOffset) {
+            warnings.add("kafka-scanner: WARNING: --from=offset:" + expectedFirstOffset
+                    + " does not exist on partition " + record.partition()
+                    + " (compacted away, or a control-record gap) -- the next available record, at offset "
+                    + record.offset() + ", was read instead");
         }
     }
 

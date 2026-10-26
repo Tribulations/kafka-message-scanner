@@ -25,7 +25,7 @@ class ScanSeekerTest {
         consumer.seek(TP0, 10L);
         List<TopicPartition> partitions = Collections.singletonList(TP0);
 
-        ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("earliest"));
+        ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("earliest"), false);
 
         assertEquals(0L, consumer.position(TP0));
     }
@@ -35,7 +35,7 @@ class ScanSeekerTest {
         MockConsumer<byte[], byte[]> consumer = consumerWithOffsets(0L, 10L);
         List<TopicPartition> partitions = Collections.singletonList(TP0);
 
-        ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("latest"));
+        ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("latest"), false);
 
         assertEquals(10L, consumer.position(TP0));
     }
@@ -45,7 +45,7 @@ class ScanSeekerTest {
         MockConsumer<byte[], byte[]> consumer = consumerWithOffsets(0L, 10L);
         List<TopicPartition> partitions = Collections.singletonList(TP0);
 
-        ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:7"));
+        ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:7"), false);
 
         assertEquals(7L, consumer.position(TP0));
     }
@@ -56,7 +56,39 @@ class ScanSeekerTest {
         List<TopicPartition> partitions = Arrays.asList(TP0, TP1);
 
         assertThrows(ScanException.class,
-                () -> ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:7")));
+                () -> ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:7"), false));
+    }
+
+    @Test
+    void offsetBelowBeginningIsRejectedRegardlessOfFollow() {
+        MockConsumer<byte[], byte[]> consumer = consumerWithOffsets(5L, 10L);
+        List<TopicPartition> partitions = Collections.singletonList(TP0);
+
+        assertThrows(ScanException.class,
+                () -> ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:4"), false));
+        assertThrows(ScanException.class,
+                () -> ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:4"), true));
+    }
+
+    @Test
+    void offsetAtOrBeyondEndIsRejectedForABoundedScan() {
+        MockConsumer<byte[], byte[]> consumer = consumerWithOffsets(0L, 10L);
+        List<TopicPartition> partitions = Collections.singletonList(TP0);
+
+        assertThrows(ScanException.class,
+                () -> ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:10"), false));
+        assertThrows(ScanException.class,
+                () -> ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:999"), false));
+    }
+
+    @Test
+    void offsetAtOrBeyondEndIsAllowedWithFollow() throws Exception {
+        MockConsumer<byte[], byte[]> consumer = consumerWithOffsets(0L, 10L);
+        List<TopicPartition> partitions = Collections.singletonList(TP0);
+
+        ScanSeeker.seekToStart(consumer, partitions, StartPosition.parse("offset:10"), true);
+
+        assertEquals(10L, consumer.position(TP0));
     }
 
     private static MockConsumer<byte[], byte[]> consumerWithOffsets(long beginning, long end) {

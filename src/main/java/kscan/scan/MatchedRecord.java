@@ -15,9 +15,16 @@ public final class MatchedRecord {
     private final long timestamp;
     private final String key;
     private final String value;
+    private final byte[] rawValue;
     private final Map<String, String> headers;
 
-    /** Decodes the raw record bytes (UTF-8) for display; null key/value/header values stay null. */
+    /**
+     * Decodes the raw record bytes (UTF-8) for display; null key/value/header values stay null.
+     * The original value bytes are also kept verbatim (see {@link #rawValue()}) -- the UTF-8
+     * decode above is lossy (invalid byte sequences become U+FFFD) and irreversible, so anything
+     * needing the exact original bytes (e.g. {@code --output=raw}) must go through the raw array,
+     * never the decoded {@link #value()} string.
+     */
     public MatchedRecord(String topic, int partition, long offset, long timestamp,
                           byte[] rawKey, byte[] rawValue, Iterable<Header> rawHeaders) {
         this.topic = topic;
@@ -26,6 +33,7 @@ public final class MatchedRecord {
         this.timestamp = timestamp;
         this.key = Utf8.decode(rawKey);
         this.value = Utf8.decode(rawValue);
+        this.rawValue = rawValue;
         this.headers = decodeHeaders(rawHeaders);
     }
 
@@ -66,6 +74,11 @@ public final class MatchedRecord {
     /** UTF-8 decoded value, or null for a tombstone record. */
     public String value() {
         return value;
+    }
+
+    /** The original, undecoded value bytes, or null for a tombstone record. Never UTF-8 decoded. */
+    public byte[] rawValue() {
+        return rawValue;
     }
 
     /** UTF-8 decoded headers, in their original order. */

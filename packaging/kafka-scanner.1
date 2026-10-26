@@ -93,6 +93,13 @@ Pipe to \fIjq\fR for ad-hoc field inspection
 kafka-scanner \-\-topic=orders \-\-output=json \-\-limit=20 | jq '.value.status'
 .EE
 .RE
+.TP
+Extract one message's exact original bytes (no decoding, no envelope)
+.RS
+.EX
+kafka-scanner \-\-topic=orders \-\-partition=0 \-\-from=offset:3801 \-\-limit=1 \-\-output=raw | xxd
+.EE
+.RE
 .SH FILES
 .TP
 .I /etc/kafka-message-scanner/scanner.properties

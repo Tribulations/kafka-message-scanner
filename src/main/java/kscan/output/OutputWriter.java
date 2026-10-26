@@ -8,7 +8,7 @@ import java.io.PrintStream;
 /**
  * Writes scan output to stdout. Implementations must write ONLY the promised output -- nothing
  * else. One per {@link OutputMode}: {@link PrettyOutputWriter}, {@link JsonOutputWriter},
- * {@link CountOutputWriter}, {@link DistinctOutputWriter}.
+ * {@link CountOutputWriter}, {@link DistinctOutputWriter}, {@link RawOutputWriter}.
  */
 public interface OutputWriter {
 

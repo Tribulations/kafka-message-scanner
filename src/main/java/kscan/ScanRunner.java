@@ -10,6 +10,7 @@ import kscan.output.OutputField;
 import kscan.output.OutputMode;
 import kscan.output.OutputWriter;
 import kscan.output.PrettyOutputWriter;
+import kscan.output.RawOutputWriter;
 import kscan.scan.MatchHandler;
 import kscan.scan.ScanEngine;
 import kscan.scan.ScanException;
@@ -17,6 +18,8 @@ import kscan.scan.ScanResult;
 import kscan.scan.StartPosition;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 
+import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -29,7 +32,23 @@ import java.util.TreeSet;
  */
 final class ScanRunner {
 
+    /**
+     * stdout, wrapped with an explicit UTF-8 charset -- the bare {@code System.out} uses the
+     * platform default charset, which under a non-UTF-8 locale (e.g. unattended cron/ssh with no
+     * {@code LANG} set) can silently mangle non-ASCII output even in pretty/json mode, undermining
+     * any "this is exactly the original" guarantee (see {@code --output=raw}).
+     */
+    private static final PrintStream STDOUT = newUtf8Stdout();
+
     private ScanRunner() {
+    }
+
+    private static PrintStream newUtf8Stdout() {
+        try {
+            return new PrintStream(System.out, true, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new AssertionError("UTF-8 is always a supported encoding", e);
+        }
     }
 
     /**
@@ -47,7 +66,7 @@ final class ScanRunner {
         try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(kafkaProps)) {
             Set<String> topics = new TreeSet<>(consumer.listTopics().keySet());
             for (String topic : topics) {
-                System.out.println(topic);
+                STDOUT.println(topic);
             }
             System.err.println("kafka-scanner: " + topics.size() + " topic(s) on bootstrap.servers="
                     + summary.bootstrapServers());
@@ -77,6 +96,9 @@ final class ScanRunner {
             try {
                 OutputWriter writer = newWriter(mode, fields, distinct);
                 ScanResult result = runScan(consumer, config, from, until, filter, mode, writer);
+                for (String warning : result.warnings()) {
+                    System.err.println(warning);
+                }
                 writeResult(result, writer);
                 System.err.println(summary.resultLine(result.matchCount()));
 
@@ -105,6 +127,8 @@ final class ScanRunner {
                 return new CountOutputWriter();
             case DISTINCT:
                 return new DistinctOutputWriter(distinct);
+            case RAW:
+                return new RawOutputWriter();
             default:
                 return new PrettyOutputWriter(fields);
         }
@@ -132,7 +156,7 @@ final class ScanRunner {
                                        OutputWriter writer) throws ExitSignal {
         try {
             MatchHandler onMatch = config.follow() ? record -> {
-                writer.writeRecord(record, System.out);
+                writer.writeRecord(record, STDOUT);
                 sleep(config.delay());
             } : null;
             boolean keepMatches = mode != OutputMode.COUNT;
@@ -157,6 +181,6 @@ final class ScanRunner {
     }
 
     private static void writeResult(ScanResult result, OutputWriter writer) {
-        writer.write(result, System.out);
+        writer.write(result, STDOUT);
     }
 }
