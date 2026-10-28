@@ -13,7 +13,7 @@
 # the tool grew beyond pure message-scanning (see --describe).
 Name:           kafka-inspect
 Version:        %{_version}
-Release:        3%{?dist }
+Release:        4%{?dist }
 Summary:        Kafka topic/message inspector (debugging/analysis CLI)
 License:        Proprietary
 URL:            https://example.invalid/kafka-inspect
@@ -43,6 +43,7 @@ mkdir -p %{buildroot}%{_mandir}/man1
 install -m 0644 %{_sourcedir}/kscan.jar %{buildroot}/opt/kafka-inspect/kscan.jar
 install -m 0755 %{_sourcedir}/kafka-inspect %{buildroot}/opt/kafka-inspect/bin/kafka-inspect
 install -m 0644 %{_sourcedir}/scanner.properties %{buildroot}/etc/kafka-inspect/scanner.properties
+install -m 0644 %{_sourcedir}/scanner.properties.example %{buildroot}/etc/kafka-inspect/scanner.properties.example
 install -m 0644 %{_sourcedir}/kafka-inspect.1 %{buildroot}%{_mandir}/man1/kafka-inspect.1
 ln -sf ../../opt/kafka-inspect/bin/kafka-inspect %{buildroot}/usr/bin/kafka-inspect
 
@@ -54,6 +55,7 @@ ln -sf ../../opt/kafka-inspect/bin/kafka-inspect %{buildroot}/usr/bin/kafka-insp
 /usr/bin/kafka-inspect
 %dir /etc/kafka-inspect
 %config(noreplace) /etc/kafka-inspect/scanner.properties
+%config /etc/kafka-inspect/scanner.properties.example
 %{_mandir}/man1/kafka-inspect.1*
 
 %changelog

@@ -114,6 +114,11 @@ Default config file on an RPM install (\fB%config(noreplace)\fR \- edits
 survive an upgrade). A missing default config file is not an error; only an
 explicitly given \fB\-\-config=\fR/\fBSCANNER_CONFIG\fR path that doesn't
 exist is.
+.TP
+.I /etc/kafka-inspect/scanner.properties.example
+The same template, fully commented \- every key documented. Installed
+alongside for reference only; never read by \fBkafka-inspect\fR itself and
+never edited in place (copy it over \fBscanner.properties\fR instead).
 .SH ENVIRONMENT
 Every scalar flag has a matching \fBSCANNER_*\fR override (e.g.
 \fBSCANNER_TOPIC\fR, \fBSCANNER_FROM\fR, \fBSCANNER_UNTIL\fR,

@@ -134,6 +134,7 @@ Installs to:
 /opt/kafka-inspect/bin/kafka-inspect   <- wrapper script (see below)
 /usr/bin/kafka-inspect                         <- symlink to the above, for PATH convenience
 /etc/kafka-inspect/scanner.properties  <- default config, %config(noreplace)
+/etc/kafka-inspect/scanner.properties.example  <- same file, fully commented -- never edited in place
 /usr/share/man/man1/kafka-inspect.1.gz         <- `man kafka-inspect`: short synopsis + worked debugging examples
 ```
 
@@ -834,7 +835,8 @@ packaging/kafka-inspect.spec   RPM spec (package name, installed command, and /e
                          installs to /opt/kafka-inspect, /etc/kafka-inspect, a /usr/bin symlink
 packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
 packaging/vendor-dependencies.sh   vendors Maven dependencies for an offline/air-gapped RPM build
-packaging/scanner.properties   neutral config template the RPM ships (topic/bootstrap.servers commented out)
+packaging/scanner.properties   neutral config template the RPM ships (topic/bootstrap.servers commented out, concise)
+packaging/scanner.properties.example   same template, fully commented -- installed alongside, never edited in place
 packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 class in the shaded jar
 ```
 

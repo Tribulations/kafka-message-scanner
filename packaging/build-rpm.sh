@@ -46,6 +46,7 @@ cp bin/kafka-inspect "$topdir/SOURCES/kafka-inspect"
 # host has no safe guess for either, so the RPM ships a neutral template
 # with both commented out, forcing an explicit --topic=/--config= choice.
 cp packaging/scanner.properties "$topdir/SOURCES/scanner.properties"
+cp packaging/scanner.properties.example "$topdir/SOURCES/scanner.properties.example"
 cp packaging/kafka-inspect.1 "$topdir/SOURCES/kafka-inspect.1"
 
 rpmbuild \
