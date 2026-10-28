@@ -1,10 +1,12 @@
-# kafka-scanner
+# kafka-inspect
 
-A standalone command-line tool to answer one question fast: *"did a specific
-message make it into this Kafka topic, and if so, what does it look like?"*
-It scans a topic (bounded scan or live tail) and reports whether records
-exist matching a given key, header, and/or JSON field value. Debugging
-utility, not a library or a service — it runs, prints a result, and exits.
+A standalone command-line tool for debugging and inspecting real Kafka
+topics. It answers "did a specific message make it into this topic, and if
+so, what does it look like?" — scanning a topic (bounded scan or live tail)
+and reporting whether records exist matching a given key, header, and/or
+JSON field value — and, separately, "how big is this topic, and what does
+its offset range look like?" via `--describe`. Debugging utility, not a
+library or a service — it runs, prints a result, and exits.
 
 ## Table of Contents
 
@@ -16,6 +18,7 @@ utility, not a library or a service — it runs, prints a result, and exits.
   - [A typical debugging session](#a-typical-debugging-session)
   - [Flags](#flags)
   - [Listing topics](#listing-topics)
+  - [Describing a topic](#describing-a-topic)
   - [Following a topic (tail -f)](#following-a-topic-tail--f)
   - [Restricting to one partition](#restricting-to-one-partition)
   - [Jumping to a known offset](#jumping-to-a-known-offset)
@@ -82,7 +85,7 @@ dependencies once on a networked machine and carry them over:
 
 Transfer two things to the air-gapped host, however you already move files
 there (internal mirror, USB, approved transfer process — not something
-kafka-scanner itself handles): the project repo itself, and
+kafka-inspect itself handles): the project repo itself, and
 `target/offline-repo.tar.gz`. On the air-gapped host, extract the tarball
 so its contents land at `target/offline-repo` inside the repo, then run
 `build-rpm.sh` exactly as normal:
@@ -105,26 +108,33 @@ need to re-vendor) if that happens before `build-rpm.sh` runs.
 
 ```bash
 ./packaging/build-rpm.sh
-# -> target/rpmbuild/RPMS/noarch/kafka-message-scanner-<version>-1.noarch.rpm
+# -> target/rpmbuild/RPMS/noarch/kafka-inspect-<version>-1.noarch.rpm
 ```
 
-The RPM package name is descriptive (`kafka-message-scanner`) so the tool
-is easy to find via `rpm -qa`/`dnf search` on a host where it's already
-installed, and the command it installs is `kafka-scanner` — not the
-shorter `kscan` used earlier in this project, since that read as one more
-short Kerberos `k`-tool next to `kinit`/`klist`/`kdestroy`. `kafka-scanner`
-also matches the naming convention of Kafka's own official CLI tools
-(`kafka-topics`, `kafka-console-consumer`, `kafka-consumer-groups`, ...),
-which makes it recognizable as a Kafka tool at a glance.
+The RPM package name, the installed command, and the `/etc/` config
+directory are all `kafka-inspect` — one consistent name everywhere. This
+tool was originally named `kscan`, then `kafka-scanner` (moved off `kscan`
+since that read as one more short Kerberos `k`-tool next to
+`kinit`/`klist`/`kdestroy`), with the package name kept separately
+descriptive (`kafka-message-scanner`) for `rpm -qa`/`dnf search`
+discoverability. Renamed again to `kafka-inspect`, with package/command/
+`/etc/` folder now deliberately unified under one name: the tool no longer
+only scans for messages (see `--describe`, below, for topic/partition size
+and metadata), so a name built around "scanning" no longer fit, and the
+command was no longer short enough that keeping it separate from the
+package name bought much anyway. `kafka-inspect` also matches the naming
+convention of Kafka's own official CLI tools (`kafka-topics`,
+`kafka-console-consumer`, `kafka-consumer-groups`, ...), which makes it
+recognizable as a Kafka tool at a glance.
 
 Installs to:
 
 ```
-/opt/kafka-message-scanner/kscan.jar
-/opt/kafka-message-scanner/bin/kafka-scanner   <- wrapper script (see below)
-/usr/bin/kafka-scanner                         <- symlink to the above, for PATH convenience
-/etc/kafka-message-scanner/scanner.properties  <- default config, %config(noreplace)
-/usr/share/man/man1/kafka-scanner.1.gz         <- `man kafka-scanner`: short synopsis + worked debugging examples
+/opt/kafka-inspect/kscan.jar
+/opt/kafka-inspect/bin/kafka-inspect   <- wrapper script (see below)
+/usr/bin/kafka-inspect                         <- symlink to the above, for PATH convenience
+/etc/kafka-inspect/scanner.properties  <- default config, %config(noreplace)
+/usr/share/man/man1/kafka-inspect.1.gz         <- `man kafka-inspect`: short synopsis + worked debugging examples
 ```
 
 (The jar file itself keeps the internal name `kscan.jar` — it's always
@@ -132,7 +142,7 @@ invoked as an argument to `java -jar ...`, never typed as a bare command, so
 it carries none of the Kerberos-confusion risk the command rename above is
 solving.)
 
-`man kafka-scanner` is a third tier alongside `--help`/this README: it
+`man kafka-inspect` is a third tier alongside `--help`/this README: it
 deliberately defers to `--help` for the full flag reference, and exists
 mainly for its EXAMPLES section (listing topics, targeted `--match.*` scans,
 time-bounded scans, `--follow`, `--output=distinct`) so it doesn't drift out
@@ -140,10 +150,10 @@ of sync by re-documenting every flag a third time.
 
 No `Requires` on a Java package — target hosts are expected to already
 provision at least Java 8 out-of-band (confirmed via `rpm -qp --requires`
-on the built RPM). `bin/kafka-scanner` is the only thing that cares where
+on the built RPM). `bin/kafka-inspect` is the only thing that cares where
 Java actually lives:
 
-- Resolves a Java runtime, in order: `$KAFKA_SCANNER_JAVA_HOME` env var, else
+- Resolves a Java runtime, in order: `$KAFKA_INSPECT_JAVA_HOME` env var, else
   `/etc/alternatives/java` (the RHEL/Debian alternatives system's symlink
   to whatever Java the host's package manager/admin has configured as the
   system default, regardless of vendor/version), else whatever `java`
@@ -157,28 +167,28 @@ Java actually lives:
   refused as long as `alternatives` or `$PATH` can find it.
   **Java 8 is a floor, not an exact requirement** — the jar is compiled to
   Java 8 bytecode specifically so it also runs on anything newer (9, 11,
-  17, 21, ...), which the JVM has always guaranteed. `bin/kafka-scanner`
+  17, 21, ...), which the JVM has always guaranteed. `bin/kafka-inspect`
   only rejects something *older* than Java 8, or a version string it can't
   parse at all, with exit 2 and a clear message — never silently runs under
   an unverified version either way, no matter which of the above found it.
-- Injects `--config=/etc/kafka-message-scanner/scanner.properties` only if
+- Injects `--config=/etc/kafka-inspect/scanner.properties` only if
   that file exists and the caller didn't already pass their own `--config=`
   — this is what bridges the jar's own "look next to me" default (meant for
   local dev, where the jar and config sit together in `target/`) to the
-  RPM's layout, where the config lives in `/etc/kafka-message-scanner`
-  while the jar lives in `/opt/kafka-message-scanner`.
+  RPM's layout, where the config lives in `/etc/kafka-inspect`
+  while the jar lives in `/opt/kafka-inspect`.
 - Uses `exec` (not a plain subshell call) so the JVM's real exit code and
   SIGTERM handling pass straight through the wrapper untouched.
 
 ```bash
-kafka-scanner --topic=orders --follow --from=latest
-KAFKA_SCANNER_JAVA_HOME=/opt/vendor-jdk8 kafka-scanner --list-topics
-KAFKA_SCANNER_JAVA_HOME=/usr/lib/jvm/java-21-openjdk kafka-scanner --list-topics  # newer than 8 works fine too
+kafka-inspect --topic=orders --follow --from=latest
+KAFKA_INSPECT_JAVA_HOME=/opt/vendor-jdk8 kafka-inspect --list-topics
+KAFKA_INSPECT_JAVA_HOME=/usr/lib/jvm/java-21-openjdk kafka-inspect --list-topics  # newer than 8 works fine too
 ```
 
 ## Usage
 
-Run via the installed `kafka-scanner` wrapper (see above), or the jar directly:
+Run via the installed `kafka-inspect` wrapper (see above), or the jar directly:
 
 ```bash
 java -jar target/kscan.jar --topic=<name> [options]
@@ -189,7 +199,7 @@ java -jar target/kscan.jar --topic=<name> [options]
 `scanner.properties` at the project root already defaults `topic=kc-hello`,
 `from=earliest`, `limit=50`, and `kafka.bootstrap.servers=localhost:9092`
 for this project's own local test broker, and the build copies it next to
-the jar (`target/scanner.properties`) so kafka-scanner's install-relative default
+the jar (`target/scanner.properties`) so kafka-inspect's install-relative default
 config lookup finds it with **no `--config=` flag needed**:
 
 ```bash
@@ -198,7 +208,7 @@ java -jar target/kscan.jar
 
 `limit=50` is there so a zero-flag run never silently reads an entire
 large topic — see [stdout / stderr contract](#stdout--stderr-contract) for
-how kafka-scanner always shows you the limit actually in effect, so a capped
+how kafka-inspect always shows you the limit actually in effect, so a capped
 result is never mistaken for a complete one. This is the **one** default,
 whether or not a config file is present or complete — there's no separate
 "unlimited" fallback for a bare install with no `scanner.properties`.
@@ -289,6 +299,7 @@ gets a specific message instead of a generic "unknown flag".
 | `--delay=<ms>` | only with `--follow` | — | Pause this many ms after printing each live match (CLI-only; see [Following a topic](#following-a-topic-tail--f)) |
 | `--config=<path>` | no | next to the jar | Path to a `scanner.properties`-style file |
 | `--list-topics` | no | off | List topic names on the cluster and exit; `--topic=` not required |
+| `--describe` | no | off | Print a per-partition size/metadata summary for `--topic=` (required) and exit; combine with `--partition=` to restrict to one (see [Describing a topic](#describing-a-topic)) |
 | `--kafka.<prop>=<val>` | no | — | Kafka client property passthrough, repeatable for different keys; `<prop>` must be a real consumer client property name (see below) |
 | `--jvm.<prop>=<val>` | no | — | Arbitrary JVM system property, applied via `System.setProperty` before the consumer is built (see [SASL / Kerberos](#sasl--kerberos)) |
 | `--match.key=<val>` | no | — | Match records whose key contains `<val>` (see [Filters](#filters)) |
@@ -306,12 +317,16 @@ gets a specific message instead of a generic "unknown flag".
 
 `--kafka.bootstrap.servers=...` is required one way or another (CLI, env,
 or config file) — there's no safe default for "which cluster". Every
-`--kafka.<prop>=` key is checked against Kafka's own consumer client
-property names at startup — an unrecognized one (e.g. a typo like
-`bootstrap-server` instead of `bootstrap.servers`) is a hard error, with a
-"did you mean...?" suggestion when one is close, rather than silently
-having no effect while the real property keeps whatever value a config
-file or default already gave it.
+`--kafka.<prop>=` key is checked at startup against the real property
+names of whichever Kafka client the run actually uses — the consumer
+client's property names for a normal scan or `--list-topics`, or the
+*admin* client's for `--describe` (it never opens a consumer at all, see
+[Describing a topic](#describing-a-topic)) — an unrecognized one (e.g. a
+typo like `bootstrap-server` instead of `bootstrap.servers`, or a
+consumer-only tuning key like `max.poll.records` given alongside
+`--describe`) is a hard error, with a "did you mean...?" suggestion when
+one is close, rather than silently having no effect while the real
+property keeps whatever value a config file or default already gave it.
 
 ### Listing topics
 
@@ -319,18 +334,54 @@ file or default already gave it.
 sorted topic names to stdout (one per line), and exits 0 — `--topic=` is not
 required (and is ignored if given alongside it). Same fail-fast behavior as a
 scan: an unreachable broker still exits 2 within the short timeout rather
-than hanging, and prints a `kafka-scanner: connecting to bootstrap.servers=...`
+than hanging, and prints a `kafka-inspect: connecting to bootstrap.servers=...`
 line up front first, so it's clear what it was even trying to reach.
 
 ```bash
 java -jar target/kscan.jar --list-topics
 ```
 
+### Describing a topic
+
+`--describe` prints a per-partition size/metadata summary for `--topic=`
+(required, unlike `--list-topics`) and exits 0 — partition id, earliest
+offset, latest offset, and the message count that range implies (`latest -
+earliest`), plus a topic-total row. Combine with `--partition=<n>` to
+restrict it to one partition instead.
+
+It's built entirely on Kafka's `Admin` client (`describeTopics`,
+`listOffsets`) — never a consumer — mirroring the real `kafka-topics.sh
+--describe` vs. `kafka-console-consumer` split in Kafka's own tooling.
+`--limit=`/`--from=`/`--until=`/`--match.*` have no effect here (same as
+`--list-topics`), and `--fields=`/`--distinct=`/`--delay=`/`--output=raw`
+all error rather than silently doing nothing.
+
+On top of the required message-count data, `--describe` also makes a
+**best-effort** attempt to show each partition's real on-disk byte size
+(via `Admin.describeLogDirs`), labeled `BYTES (leader replica)`. This sits
+at a different, broker/cluster-level permission tier than everything else
+kafka-inspect does (which only ever needs topic-level Describe/Read) — it
+might not be granted on every cluster or credential. If it can't be
+resolved at all, the BYTES column is simply omitted (the message-count data
+still prints in full) and exactly one stderr note explains why; if only
+some partitions resolve, the column still prints with `n/a` in the rest and
+the totals line is marked `(partial: X of Y partitions)`. Either way, exit
+code and the message-count data are unaffected — a missing byte size is
+never treated as a failure.
+
+Byte sizes print in human-readable units (`B`/`KB`/`MB`/`GB`/`TB`, climbing
+the ladder as needed — e.g. `202.21 KB`, `3.89 MB`), not a raw byte count.
+
+```bash
+java -jar target/kscan.jar --describe --topic=orders
+java -jar target/kscan.jar --describe --topic=orders --partition=0
+```
+
 ### Following a topic (tail -f)
 
 `--follow` turns a bounded scan into an unbounded one: instead of stopping
 once every assigned partition reaches the offset it was at when the scan
-started, kafka-scanner keeps polling and streams each match to stdout as soon as
+started, kafka-inspect keeps polling and streams each match to stdout as soon as
 it's found (not batched until the end, since the scan may never end on its
 own). Combine it with `--from=latest` to only see records produced from now
 on, like `tail -f`, or `--from=earliest` to replay everything first and then
@@ -340,7 +391,7 @@ keep following — `--follow` doesn't change what `--from=` means.
 java -jar target/kscan.jar --topic=orders --from=latest --follow
 ```
 
-Stop it with Ctrl-C (or `SIGTERM`) — kafka-scanner catches both, prints the same
+Stop it with Ctrl-C (or `SIGTERM`) — kafka-inspect catches both, prints the same
 summary line and exit code (0/1/2) a bounded scan would, and does **not**
 exit with the shell's default 128+signal code. A quiet topic never triggers
 the stall-failure that a bounded scan would (an idle topic is exactly what
@@ -355,7 +406,7 @@ entirely inside each output mode's own final write step, with no
 per-record moment outside it to pace, and `--output=distinct`/
 `--list-topics` never print per-record output at all — combining
 `--delay=` with any of those is a conflict (exit 2), not a silent no-op.
-When active, kafka-scanner also pins `max.poll.records=1` (unless you've already
+When active, kafka-inspect also pins `max.poll.records=1` (unless you've already
 set your own) — otherwise a single poll against a busy topic could return
 a whole batch, and pacing through an entire batch sequentially would make
 Ctrl-C take much longer than expected to actually stop anything.
@@ -366,7 +417,7 @@ java -jar target/kscan.jar --topic=orders --follow --delay=500
 
 ### Restricting to one partition
 
-By default kafka-scanner scans every partition of a topic, interleaved as the
+By default kafka-inspect scans every partition of a topic, interleaved as the
 broker returns records — Kafka only guarantees ordering *within* a
 partition, never across them, so the order you see mixes several
 independent sequences. `--partition=<n>` restricts the scan (and `--follow`)
@@ -565,7 +616,7 @@ java -jar target/kscan.jar --topic=kc-orders --match.field=ts~^2026-10-22
 
 See [`scanner.properties`](scanner.properties) for every key, fully
 commented with its purpose, valid values, and default (or why it has none).
-The file is entirely optional — kafka-scanner runs fine with no file at all, as
+The file is entirely optional — kafka-inspect runs fine with no file at all, as
 long as `--topic=` and `--kafka.bootstrap.servers=` are supplied some other
 way.
 
@@ -653,12 +704,12 @@ file path, or `<none>` if no file was actually read) — so "N matched" is
 always attributable to an exact, visible set of settings, never a guess:
 
 ```
-kafka-scanner: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest limit=50 output=pretty config=/opt/kafka-message-scanner/scanner.properties
-kafka-scanner: 50 matched on topic=orders limit=50 bootstrap.servers=localhost:9092
+kafka-inspect: connecting to bootstrap.servers=localhost:9092 topic=orders from=earliest limit=50 output=pretty config=/opt/kafka-inspect/scanner.properties
+kafka-inspect: 50 matched on topic=orders limit=50 bootstrap.servers=localhost:9092
 ```
 
-Right after the connecting line, kafka-scanner also prints a non-blocking
-`kafka-scanner: WARNING: ...` line (still stderr-only) for a couple of scan
+Right after the connecting line, kafka-inspect also prints a non-blocking
+`kafka-inspect: WARNING: ...` line (still stderr-only) for a couple of scan
 shapes that can be very costly against a huge production cluster: an
 unbounded (`--limit=0`) scan from `earliest` across every partition, and
 a very large `--limit` (100,000+) combined with a buffering output mode
@@ -722,9 +773,9 @@ broker, the zero-match exit code, stdout/stderr separation, `--list-topics`,
 exit code, both alone and combined with `--limit`), `--output=json`,
 `--output=count`, `--match.field` (Jackson), and `--limit`.
 
-`bin/kafka-scanner` and the built RPM are verified the same way: both a real
+`bin/kafka-inspect` and the built RPM are verified the same way: both a real
 Java 8 runtime and a newer one (JDK 21) running the wrapper through the
-`/usr/bin/kafka-scanner` symlink and the RPM's actual extracted contents, confirming
+`/usr/bin/kafka-inspect` symlink and the RPM's actual extracted contents, confirming
 Java 8 is accepted as a floor, not an exact requirement; the wrapper's
 too-old-Java rejection, unparseable-version rejection, and missing-Java
 handling (exit 2 in each case); its default-`--config=`-injection logic
@@ -732,14 +783,15 @@ handling (exit 2 in each case); its default-`--config=`-injection logic
 otherwise falls through to the jar's own default, never overrides an
 explicit `--config=`); and the full RPM lifecycle in a container with a
 real `java-1.8.0-openjdk-headless` install — a clean `rpm -ivh` install and
-end-to-end scan, an edited `/etc/kafka-message-scanner/scanner.properties` surviving an
+end-to-end scan, an edited `/etc/kafka-inspect/scanner.properties` surviving an
 `rpm -Uvh` upgrade untouched (the new default appears alongside as
 `.rpmnew` once the template actually changes), and a clean `rpm -e` leaving
 no stray files or directories. `rpm -qlpv`/`rpm -qp --requires` confirm the
 file list, permissions, and that no `java` dependency is declared;
 `rpm -qa`/`dnf search` confirm the package is actually findable by
-`kafka`, the point of its descriptive name, with `kafka-scanner` as the
-installed command. The offline/air-gapped build path
+`kafka`, matching the one name used for the package, the installed
+command, and the `/etc/` config directory alike. The offline/air-gapped
+build path
 (`packaging/vendor-dependencies.sh` + `build-rpm.sh`'s auto-detected
 offline mode) was verified by physically hiding this machine's real
 `~/.m2/repository` and confirming the RPM still builds successfully from
@@ -760,24 +812,26 @@ scanner.properties       config file template, fully commented
 kafka_client_jaas.conf.example   external JAAS file example for Kerberos
 src/main/java/kscan/
   Main.java                 entry point only: System.exit(KscanApp.run(args))
-  KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics -> exit code
-  KscanCli.java             kafka-scanner's flag schema, --help text, and CLI parsing wiring
-  StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/filter/etc.
+  KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics/describe -> exit code
+  KscanCli.java             kafka-inspect's flag schema, --help text, and CLI parsing wiring
+  StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/admin-props/filter/etc.
   ScanRunner.java           opens the consumer, runs the scan or --list-topics, reports the result
-  RunSummary.java           builds the stderr connecting/result summary lines ScanRunner prints
+  DescribeRunner.java       opens an Admin client and runs --describe, reports the result
+  RunSummary.java           builds the stderr connecting/result summary lines ScanRunner/DescribeRunner print
   ScanRiskWarnings.java     builds the stderr WARNING lines for costly scan shapes (see below)
   ShutdownCoordinator.java  Ctrl-C/SIGTERM handling so --follow exits 0/1/2, never 143
   ExitSignal.java           shared exit-code-carrying exception used across the above
+  admin/                 --describe's Admin-based size/metadata fetching and plain-text formatting
   cli/                   strict CLI argument parsing
   config/                config file + env + CLI merge and validation
-  kafka/                 the one class that touches connection/auth settings
+  kafka/                 the two classes that touch connection/auth settings (consumer and admin)
   scan/                  pure scan/filter logic (testable without a broker)
   filter/                match.key/match.header/match.field filters, ANDed together
   output/                output writers: pretty, json (NDJSON), count
 src/test/java/kscan/     unit tests (MockConsumer-based)
-bin/kafka-scanner        wrapper script: resolves Java 8+, injects default --config=, execs the jar
-packaging/kafka-message-scanner.spec   RPM spec (package name is descriptive; installed command is "kafka-scanner"):
-                         installs to /opt/kafka-message-scanner, /etc/kafka-message-scanner, a /usr/bin symlink
+bin/kafka-inspect        wrapper script: resolves Java 8+, injects default --config=, execs the jar
+packaging/kafka-inspect.spec   RPM spec (package name, installed command, and /etc/ folder are all "kafka-inspect"):
+                         installs to /opt/kafka-inspect, /etc/kafka-inspect, a /usr/bin symlink
 packaging/build-rpm.sh   builds the RPM from VERSION + the current source tree
 packaging/vendor-dependencies.sh   vendors Maven dependencies for an offline/air-gapped RPM build
 packaging/scanner.properties   neutral config template the RPM ships (topic/bootstrap.servers commented out)
@@ -789,13 +843,23 @@ packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 c
 - No real GSSAPI/Kerberos round-trip test (see [SASL / Kerberos](#sasl--kerberos))
   — only the passthrough plumbing is verified, not an actual ticket exchange
   against a KDC.
-- `bin/kafka-scanner` now also checks `/etc/alternatives/java` and `$PATH`
+- `bin/kafka-inspect` now also checks `/etc/alternatives/java` and `$PATH`
   before falling back to its two hardcoded RHEL/CentOS 7-/9-style paths, so
   most hosts no longer need an override; if none of those find a usable
-  Java, set `KAFKA_SCANNER_JAVA_HOME` explicitly (check `ls /usr/lib/jvm` on
+  Java, set `KAFKA_INSPECT_JAVA_HOME` explicitly (check `ls /usr/lib/jvm` on
   that host).
 - No execution timeout on a user-supplied `--match.field=path~regex`. A
   deliberately pathological pattern (catastrophic backtracking) could hang
   the process against real message content. This requires a specifically
   crafted bad regex, not something a large topic triggers on its own — be
   careful with complex/untrusted regexes against production data.
+- `--describe`'s required message-count figures are an **offset range**
+  (`latest - earliest`), not a guaranteed exact live count — on a compacted
+  topic, some offsets in that range no longer correspond to a real record,
+  so the true message count can be slightly lower than what's shown.
+- `--describe`'s on-disk byte-size columns are **best-effort and
+  permission-dependent** (`Admin.describeLogDirs`, a broker/cluster-level
+  permission tier different from everything else kafka-inspect does) —
+  they may be silently omitted on a cluster/credential that doesn't grant
+  it, with a clear stderr note explaining why; the required message-count
+  data is never affected by this.

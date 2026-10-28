@@ -47,7 +47,7 @@ final class ScanRiskWarnings {
             return;
         }
 
-        warnings.add("kafka-scanner: WARNING: unbounded scan from=earliest across all partitions -- this can read "
+        warnings.add("kafka-inspect: WARNING: unbounded scan from=earliest across all partitions -- this can read "
                 + "a very large volume of data from a production topic. Re-run with --limit=<n> or "
                 + "--partition=<n> to bound it, or Ctrl-C now before it starts.");
     }
@@ -68,7 +68,7 @@ final class ScanRiskWarnings {
         }
 
         String limitDisplay = config.limit() == 0 ? "unlimited" : String.valueOf(config.limit());
-        warnings.add("kafka-scanner: WARNING: limit=" + limitDisplay + " with --output=" + config.output()
+        warnings.add("kafka-inspect: WARNING: limit=" + limitDisplay + " with --output=" + config.output()
                 + " buffers every matched record in memory until the scan finishes -- large exports may "
                 + "use significant memory. Consider a smaller --limit or --output=count instead.");
     }

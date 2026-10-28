@@ -99,6 +99,31 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void describeRequiresTopic(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--describe"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void describeIsFineWithPartition(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli("--describe", "--partition=0"), configFile,
+                Collections.emptyMap());
+        assertEquals(Integer.valueOf(0), config.partition());
+    }
+
+    @Test
+    void describeConflictsWithListTopics(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--describe", "--list-topics"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void cliMatchHeaderReplacesRatherThanAppendsToTheFileList(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir,
                 "topic=t\nkafka.bootstrap.servers=localhost:9092\n"
@@ -263,6 +288,14 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void fieldsConflictsWithDescribe(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--describe", "--fields=value"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void fieldsIsFineWithExplicitPrettyOutput(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -317,6 +350,14 @@ class ConfigBuilderTest {
 
         assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
                 cli("--list-topics", "--output=distinct", "--distinct=key"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void distinctConflictsWithDescribe(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--describe", "--output=distinct", "--distinct=key"), configFile, Collections.emptyMap()));
     }
 
     @Test
@@ -381,6 +422,14 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void delayConflictsWithDescribe(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--describe", "--follow", "--delay=500"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void negativeDelayIsRejected(@TempDir Path dir) {
         Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -408,6 +457,14 @@ class ConfigBuilderTest {
 
         assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
                 cli("--list-topics", "--output=raw", "--limit=1"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void rawOutputConflictsWithDescribe(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--describe", "--output=raw", "--limit=1"), configFile, Collections.emptyMap()));
     }
 
     @Test
@@ -479,7 +536,7 @@ class ConfigBuilderTest {
     }
 
     private static Set<String> knownBooleanKeys() {
-        return setOf("help", "list-topics", "follow", "match.exact", "match.case-sensitive");
+        return setOf("help", "list-topics", "describe", "follow", "match.exact", "match.case-sensitive");
     }
 
     private static Set<String> repeatableKeys() {

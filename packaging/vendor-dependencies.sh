@@ -21,7 +21,7 @@ version="$(cat VERSION)"
 rm -rf "$offline_repo"
 mkdir -p "$offline_repo"
 
-echo "kafka-scanner: vendoring dependencies for an offline build into $offline_repo"
+echo "kafka-inspect: vendoring dependencies for an offline build into $offline_repo"
 # dependency:go-offline alone isn't enough -- it resolves this project's own declared
 # dependencies but not every internal component a build plugin instantiates at runtime (e.g.
 # maven-resources-plugin's own MavenResourcesFiltering helper), so a later `mvn -o package`
@@ -34,8 +34,8 @@ tar_path="target/offline-repo.tar.gz"
 tar -czf "$tar_path" -C target offline-repo
 
 echo
-echo "kafka-scanner: vendored dependency bundle ready: $tar_path"
-echo "kafka-scanner: transfer this file, alongside the project repo itself, to the"
+echo "kafka-inspect: vendored dependency bundle ready: $tar_path"
+echo "kafka-inspect: transfer this file, alongside the project repo itself, to the"
 echo "       air-gapped build host. There, extract it so its contents land"
 echo "       at target/offline-repo inside the repo, then run"
 echo "       packaging/build-rpm.sh normally -- it auto-detects the vendored"

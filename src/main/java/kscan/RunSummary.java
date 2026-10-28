@@ -23,7 +23,7 @@ final class RunSummary {
 
     /** Printed before the consumer is even opened, so a hung/refused connection still shows what was tried. */
     String connectionLine() {
-        return "kafka-scanner: connecting to bootstrap.servers=" + bootstrapServers()
+        return "kafka-inspect: connecting to bootstrap.servers=" + bootstrapServers()
                 + " topic=" + config.topic() + partitionSuffix()
                 + " from=" + config.from() + untilSuffix() + limitSuffix() + " output=" + config.output()
                 + fieldsSuffix() + distinctSuffix() + " config=" + configFileSuffix()
@@ -32,7 +32,7 @@ final class RunSummary {
 
     /** Printed once the scan finishes. */
     String resultLine(long matchCount) {
-        return "\nkafka-scanner: " + matchCount + " matched on topic=" + config.topic()
+        return "\nkafka-inspect: " + matchCount + " matched on topic=" + config.topic()
                 + partitionSuffix() + limitSuffix()
                 + " bootstrap.servers=" + bootstrapServers();
     }

@@ -6,6 +6,7 @@ import kscan.config.ConfigLoadException;
 import kscan.config.ScannerConfig;
 import kscan.filter.RecordFilter;
 import kscan.filter.RecordFilterFactory;
+import kscan.kafka.AdminPropertiesFactory;
 import kscan.kafka.ConsumerPropertiesFactory;
 import kscan.output.DistinctSpec;
 import kscan.output.OutputField;
@@ -46,6 +47,15 @@ final class StartupPipeline {
     static Properties buildKafkaProperties(ScannerConfig config) throws ExitSignal {
         try {
             return ConsumerPropertiesFactory.build(config.kafkaProperties(), config.delay());
+        } catch (ConfigLoadException e) {
+            throw new ExitSignal(2, e.getMessage());
+        }
+    }
+
+    /** Admin-validated properties for {@code --describe} -- never Consumer-validated (see {@link AdminPropertiesFactory}). */
+    static Properties buildAdminProperties(ScannerConfig config) throws ExitSignal {
+        try {
+            return AdminPropertiesFactory.build(config.kafkaProperties());
         } catch (ConfigLoadException e) {
             throw new ExitSignal(2, e.getMessage());
         }

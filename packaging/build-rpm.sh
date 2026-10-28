@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds target/rpmbuild/RPMS/noarch/kafka-message-scanner-<version>-1.noarch.rpm from the
+# Builds target/rpmbuild/RPMS/noarch/kafka-inspect-<version>-1.noarch.rpm from the
 # current source tree. VERSION (repo root) is the single source of truth for
 # the version number -- this script is the only place that needs to read it;
 # see pom.xml's "revision" property comment for why a plain "mvn package"
@@ -12,7 +12,7 @@ repo_root="$(dirname "$script_dir")"
 cd "$repo_root"
 
 version="$(cat VERSION)"
-echo "kafka-scanner: building version $version"
+echo "kafka-inspect: building version $version"
 
 # If packaging/vendor-dependencies.sh was already run (on a networked machine) and its
 # target/offline-repo.tar.gz was extracted here, build against that vendored repo instead of
@@ -23,7 +23,7 @@ echo "kafka-scanner: building version $version"
 mvn_args=(-q package -Drevision="$version")
 offline_repo="target/offline-repo"
 if [ -d "$offline_repo" ]; then
-    echo "kafka-scanner: vendored dependency repo found at $offline_repo -- building offline"
+    echo "kafka-inspect: vendored dependency repo found at $offline_repo -- building offline"
     mvn_args+=(-o "-Dmaven.repo.local=$offline_repo")
 fi
 
@@ -40,19 +40,19 @@ rm -rf "$topdir"
 mkdir -p "$topdir"/{BUILD,RPMS,SRPMS,SOURCES,SPECS,BUILDROOT}
 
 cp target/kscan.jar "$topdir/SOURCES/kscan.jar"
-cp bin/kafka-scanner "$topdir/SOURCES/kafka-scanner"
+cp bin/kafka-inspect "$topdir/SOURCES/kafka-inspect"
 # Deliberately NOT the dev-flavored scanner.properties at the repo root
 # (topic=kc-hello, kafka.bootstrap.servers=localhost:9092) -- a production
 # host has no safe guess for either, so the RPM ships a neutral template
 # with both commented out, forcing an explicit --topic=/--config= choice.
 cp packaging/scanner.properties "$topdir/SOURCES/scanner.properties"
-cp packaging/kafka-scanner.1 "$topdir/SOURCES/kafka-scanner.1"
+cp packaging/kafka-inspect.1 "$topdir/SOURCES/kafka-inspect.1"
 
 rpmbuild \
     --define "_topdir $topdir" \
     --define "_version $version" \
-    -bb packaging/kafka-message-scanner.spec
+    -bb packaging/kafka-inspect.spec
 
 echo
-echo "kafka-scanner: RPM(s) built:"
+echo "kafka-inspect: RPM(s) built:"
 find "$topdir/RPMS" -name '*.rpm'

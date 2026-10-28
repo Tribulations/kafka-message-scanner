@@ -8,14 +8,14 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * kafka-scanner's own specific command-line schema: which flags exist, the usage text describing
+ * kafka-inspect's own specific command-line schema: which flags exist, the usage text describing
  * them, and the wiring that turns raw args into a validated {@link CliArgs}. Distinct from
  * {@link CliArgs} itself, which is the generic, reusable strict parser this wraps.
  */
 final class KscanCli {
 
     static final String USAGE =
-            "Usage: kafka-scanner --topic=<name> [options]\n"
+            "Usage: kafka-inspect --topic=<name> [options]\n"
             + "\n"
             + "  --topic=<name>        topic to scan (required), e.g. --topic=orders\n"
             + "  --from=<pos>          starting Kafka offset/position to read from: earliest | latest |\n"
@@ -42,11 +42,19 @@ final class KscanCli {
             + "                        e.g. --follow --from=latest   (only see records from now on)\n"
             + "  --delay=<ms>          pause this many ms after printing each live match -- only\n"
             + "                        valid with --follow (a bounded scan has no per-record moment\n"
-            + "                        to pace); errors with --output=distinct or --list-topics\n"
+            + "                        to pace); errors with --output=distinct, --list-topics, or --describe\n"
             + "                        e.g. --follow --delay=500   (watch live traffic at a readable pace)\n"
             + "  --config=<path>       path to scanner.properties (default: next to the jar)\n"
-            + "                        e.g. --config=/etc/kafka-message-scanner/scanner.properties\n"
+            + "                        e.g. --config=/etc/kafka-inspect/scanner.properties\n"
             + "  --list-topics         list topic names visible on the cluster and exit (no --topic= needed)\n"
+            + "  --describe            print a per-partition message-count (and, best-effort, on-disk\n"
+            + "                        byte size) summary for --topic=, then exit (requires --topic=)\n"
+            + "                        combine with --partition=<n> to restrict to one partition\n"
+            + "                        --limit=/--from=/--until=/--match.* have no effect here (same\n"
+            + "                        as --list-topics); errors with --fields=/--distinct=/--delay=/\n"
+            + "                        --output=raw/--list-topics\n"
+            + "                        e.g. --describe --topic=orders\n"
+            + "                             --describe --topic=orders --partition=0\n"
             + "  --kafka.<prop>=<val>  arbitrary Kafka client property, e.g. --kafka.bootstrap.servers=host:9092\n"
             + "                        for SASL/Kerberos: --kafka.security.protocol=SASL_PLAINTEXT\n"
             + "                        --kafka.sasl.mechanism=GSSAPI --kafka.sasl.jaas.config=...\n"
@@ -94,13 +102,13 @@ final class KscanCli {
             + "                        below -- requires it, and doesn't support --follow (yet)\n"
             + "                        raw: the matched record's exact original value bytes, nothing\n"
             + "                        else -- no decoding, no envelope; requires --limit=1, errors\n"
-            + "                        with --follow or --list-topics\n"
+            + "                        with --follow, --list-topics, or --describe\n"
             + "                        e.g. --output=json   (pipe to jq)   or   --output=count\n"
             + "                             --output=raw --limit=1   (exact bytes, pipe to xxd/protoc)\n"
             + "  --fields=<list>       restrict a pretty-output block to just these comma-separated\n"
             + "                        sections: metadata (topic/partition/offset/timestamp), key,\n"
             + "                        headers, value -- only valid with --output=pretty (the default);\n"
-            + "                        errors with --output=json/count/distinct/raw or --list-topics\n"
+            + "                        errors with --output=json/count/distinct/raw, --list-topics, or --describe\n"
             + "                        e.g. --fields=headers,value   (skip metadata/key when skimming)\n"
             + "  --distinct=<spec>     what to count for --output=distinct: key | header:<name> |\n"
             + "                        field:<path> (same dotted path as --match.field); required\n"
@@ -114,7 +122,7 @@ final class KscanCli {
     private KscanCli() {
     }
 
-    /** Parses {@code args} against kafka-scanner's known flag schema, or fails with a usage-printing {@link ExitSignal}. */
+    /** Parses {@code args} against kafka-inspect's known flag schema, or fails with a usage-printing {@link ExitSignal}. */
     static CliArgs parse(String[] args) throws ExitSignal {
         try {
             return CliArgs.parse(args, knownValueKeys(), knownBooleanKeys(), repeatableKeys());
@@ -129,7 +137,7 @@ final class KscanCli {
     }
 
     private static Set<String> knownBooleanKeys() {
-        return setOf("help", "list-topics", "follow", "match.exact", "match.case-sensitive");
+        return setOf("help", "list-topics", "describe", "follow", "match.exact", "match.case-sensitive");
     }
 
     private static Set<String> repeatableKeys() {

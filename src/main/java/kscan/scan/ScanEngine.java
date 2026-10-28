@@ -213,7 +213,7 @@ public final class ScanEngine {
         firstRecordChecked = true;
 
         if (record.offset() != expectedFirstOffset) {
-            warnings.add("kafka-scanner: WARNING: --from=offset:" + expectedFirstOffset
+            warnings.add("kafka-inspect: WARNING: --from=offset:" + expectedFirstOffset
                     + " does not exist on partition " + record.partition()
                     + " (compacted away, or a control-record gap) -- the next available record, at offset "
                     + record.offset() + ", was read instead");

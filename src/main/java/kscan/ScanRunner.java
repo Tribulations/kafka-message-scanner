@@ -60,7 +60,7 @@ final class ScanRunner {
      */
     static int listTopics(Properties kafkaProps, ScannerConfig config) throws ExitSignal {
         RunSummary summary = new RunSummary(kafkaProps, config);
-        System.err.println("kafka-scanner: connecting to bootstrap.servers=" + summary.bootstrapServers()
+        System.err.println("kafka-inspect: connecting to bootstrap.servers=" + summary.bootstrapServers()
                 + " config=" + summary.configFileSuffix() + " (list-topics)");
 
         try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(kafkaProps)) {
@@ -68,7 +68,7 @@ final class ScanRunner {
             for (String topic : topics) {
                 STDOUT.println(topic);
             }
-            System.err.println("kafka-scanner: " + topics.size() + " topic(s) on bootstrap.servers="
+            System.err.println("kafka-inspect: " + topics.size() + " topic(s) on bootstrap.servers="
                     + summary.bootstrapServers());
 
             return 0;

@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 #
-# kafka-scanner wrapper: resolves a Java 8-or-newer runtime and execs the
+# kafka-inspect wrapper: resolves a Java 8-or-newer runtime and execs the
 # shaded jar, injecting the RPM-installed default config path if the caller
 # didn't supply one. Java 8 is a floor, not an exact requirement -- the jar is
 # compiled to Java 8 bytecode so it also runs fine on anything newer.
-# Java resolution order: $KAFKA_SCANNER_JAVA_HOME, then /etc/alternatives/java,
+# Java resolution order: $KAFKA_INSPECT_JAVA_HOME, then /etc/alternatives/java,
 # then $PATH, then two hardcoded Java-8-specific fallback paths as a last
 # resort.
 #
-# Expected install layout (see packaging/kafka-message-scanner.spec -- the
-# RPM package name is also descriptive, matching the command: "kscan" was
-# dropped in favor of "kafka-scanner" so it doesn't read as one more
-# Kerberos k-tool next to kinit/klist/kdestroy):
-#   /opt/kafka-message-scanner/kscan.jar
-#   /opt/kafka-message-scanner/bin/kafka-scanner          <- this script
-#   /usr/bin/kafka-scanner                                <- symlink to the above, for PATH convenience
-#   /etc/kafka-message-scanner/scanner.properties         <- default config (RPM-managed, %config(noreplace))
+# Expected install layout (see packaging/kafka-inspect.spec -- the RPM
+# package name, this command, and the /etc/ config dir are all
+# "kafka-inspect", one consistent name everywhere; originally "kscan",
+# dropped since it read as one more short Kerberos k-tool next to
+# kinit/klist/kdestroy):
+#   /opt/kafka-inspect/kscan.jar
+#   /opt/kafka-inspect/bin/kafka-inspect          <- this script
+#   /usr/bin/kafka-inspect                                <- symlink to the above, for PATH convenience
+#   /etc/kafka-inspect/scanner.properties         <- default config (RPM-managed, %config(noreplace))
 set -euo pipefail
 
 # Last-resort fallback paths, tried only if /etc/alternatives/java and $PATH
@@ -29,9 +30,9 @@ DEFAULT_JAVA_HOME_CANDIDATES=(
     "/usr/lib/jvm/java-1.8.0-openjdk"
     "/usr/lib/jvm/jre-1.8.0-openjdk"
 )
-DEFAULT_CONFIG="/etc/kafka-message-scanner/scanner.properties"
+DEFAULT_CONFIG="/etc/kafka-inspect/scanner.properties"
 
-# readlink -f follows the /usr/bin/kafka-scanner symlink to its real location
+# readlink -f follows the /usr/bin/kafka-inspect symlink to its real location
 # before deriving the install directory -- a bare "dirname "$0"" would instead
 # resolve against /usr/bin and never find the jar next to the real script.
 script_path="$(readlink -f "$0")"
@@ -39,15 +40,15 @@ install_dir="$(dirname "$(dirname "$script_path")")"
 jar_path="$install_dir/kscan.jar"
 
 if [ ! -f "$jar_path" ]; then
-    echo "kafka-scanner: cannot find $jar_path (expected next to this script's install directory)" >&2
+    echo "kafka-inspect: cannot find $jar_path (expected next to this script's install directory)" >&2
     exit 2
 fi
 
 java_bin=""
-if [ -n "${KAFKA_SCANNER_JAVA_HOME:-}" ]; then
-    java_bin="$KAFKA_SCANNER_JAVA_HOME/bin/java"
+if [ -n "${KAFKA_INSPECT_JAVA_HOME:-}" ]; then
+    java_bin="$KAFKA_INSPECT_JAVA_HOME/bin/java"
     if [ ! -x "$java_bin" ]; then
-        echo "kafka-scanner: no usable java found at $java_bin (from KAFKA_SCANNER_JAVA_HOME)" >&2
+        echo "kafka-inspect: no usable java found at $java_bin (from KAFKA_INSPECT_JAVA_HOME)" >&2
         exit 2
     fi
 else
@@ -75,7 +76,7 @@ else
         done
     fi
     if [ -z "$java_bin" ]; then
-        echo "kafka-scanner: no usable java found (checked /etc/alternatives/java, \$PATH, and: ${DEFAULT_JAVA_HOME_CANDIDATES[*]}) -- set KAFKA_SCANNER_JAVA_HOME to a Java 8+ install" >&2
+        echo "kafka-inspect: no usable java found (checked /etc/alternatives/java, \$PATH, and: ${DEFAULT_JAVA_HOME_CANDIDATES[*]}) -- set KAFKA_INSPECT_JAVA_HOME to a Java 8+ install" >&2
         exit 2
     fi
 fi
@@ -91,7 +92,7 @@ version_line="$("$java_bin" -version 2>&1 | grep -m1 'version "' || true)"
 version_string="$(printf '%s' "$version_line" | sed -n 's/.*version "\([^"]*\)".*/\1/p')"
 
 if [ -z "$version_string" ]; then
-    echo "kafka-scanner: could not determine the Java version at $java_bin (output: ${version_line:-none}) -- set KAFKA_SCANNER_JAVA_HOME to a Java 8+ install" >&2
+    echo "kafka-inspect: could not determine the Java version at $java_bin (output: ${version_line:-none}) -- set KAFKA_INSPECT_JAVA_HOME to a Java 8+ install" >&2
     exit 2
 fi
 
@@ -108,19 +109,19 @@ case "$version_string" in
 esac
 
 if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
-    echo "kafka-scanner: could not parse the Java major version from '$version_string' at $java_bin -- set KAFKA_SCANNER_JAVA_HOME to a Java 8+ install" >&2
+    echo "kafka-inspect: could not parse the Java major version from '$version_string' at $java_bin -- set KAFKA_INSPECT_JAVA_HOME to a Java 8+ install" >&2
     exit 2
 fi
 
 if [ "$major" -lt 8 ]; then
-    echo "kafka-scanner: $java_bin is Java $major, older than the minimum supported version (8) -- set KAFKA_SCANNER_JAVA_HOME to a Java 8+ install" >&2
+    echo "kafka-inspect: $java_bin is Java $major, older than the minimum supported version (8) -- set KAFKA_INSPECT_JAVA_HOME to a Java 8+ install" >&2
     exit 2
 fi
 
 # Only inject the RPM-installed default config if the caller didn't already
 # pass their own --config= and that default actually exists -- this keeps the
 # wrapper working when it's copied/tested outside of an RPM install too (no
-# /etc/kafka-message-scanner, so kscan.jar's own install-relative lookup
+# /etc/kafka-inspect, so kscan.jar's own install-relative lookup
 # takes over instead).
 config_args=()
 if [ -f "$DEFAULT_CONFIG" ]; then
