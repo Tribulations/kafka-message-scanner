@@ -20,7 +20,7 @@ clean:
 	mvn -q clean
 
 help:
-	@echo "jar    build target/kscan.jar (default)"
+	@echo "jar    build target/kafka-inspect.jar (default)"
 	@echo "test   run the unit test suite"
 	@echo "rpm    build the RPM via packaging/build-rpm.sh"
 	@echo "vendor vendor dependencies for an offline/air-gapped rpm build"

@@ -61,7 +61,11 @@
   </dependencies>
 
   <build>
-    <finalName>${project.artifactId}</finalName>
+    <!-- Deliberately not ${project.artifactId}, which stays "kscan" (the internal Maven
+         coordinate, never renamed since nobody discovers this tool via Maven coordinates): the
+         shipped jar file itself is user-facing (java -jar target/kafka-inspect.jar,
+         /opt/kafka-inspect/kafka-inspect.jar) and follows the kafka-inspect command/package rename. -->
+    <finalName>kafka-inspect</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

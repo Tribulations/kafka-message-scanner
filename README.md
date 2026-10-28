@@ -42,7 +42,7 @@ of which JDK compiles it.
 
 ```bash
 mvn package
-# -> target/kscan.jar           (shaded/fat jar, no runtime dependency resolution needed)
+# -> target/kafka-inspect.jar           (shaded/fat jar, no runtime dependency resolution needed)
 # -> target/scanner.properties  (copied next to the jar -- see Quick start below)
 ```
 
@@ -130,7 +130,7 @@ recognizable as a Kafka tool at a glance.
 Installs to:
 
 ```
-/opt/kafka-inspect/kscan.jar
+/opt/kafka-inspect/kafka-inspect.jar
 /opt/kafka-inspect/bin/kafka-inspect   <- wrapper script (see below)
 /usr/bin/kafka-inspect                         <- symlink to the above, for PATH convenience
 /etc/kafka-inspect/scanner.properties  <- default config, %config(noreplace)
@@ -138,10 +138,10 @@ Installs to:
 /usr/share/man/man1/kafka-inspect.1.gz         <- `man kafka-inspect`: short synopsis + worked debugging examples
 ```
 
-(The jar file itself keeps the internal name `kscan.jar` — it's always
-invoked as an argument to `java -jar ...`, never typed as a bare command, so
-it carries none of the Kerberos-confusion risk the command rename above is
-solving.)
+(The jar file is `kafka-inspect.jar`, matching the command/package rename
+above — it's built from the Maven `kscan` artifact, whose coordinates and
+`kscan.*` Java package stay unchanged since nobody discovers this tool via
+Maven coordinates or an internal jar name.)
 
 `man kafka-inspect` is a third tier alongside `--help`/this README: it
 deliberately defers to `--help` for the full flag reference, and exists
@@ -192,7 +192,7 @@ KAFKA_INSPECT_JAVA_HOME=/usr/lib/jvm/java-21-openjdk kafka-inspect --list-topics
 Run via the installed `kafka-inspect` wrapper (see above), or the jar directly:
 
 ```bash
-java -jar target/kscan.jar --topic=<name> [options]
+java -jar target/kafka-inspect.jar --topic=<name> [options]
 ```
 
 ### Quick start
@@ -204,7 +204,7 @@ the jar (`target/scanner.properties`) so kafka-inspect's install-relative defaul
 config lookup finds it with **no `--config=` flag needed**:
 
 ```bash
-java -jar target/kscan.jar
+java -jar target/kafka-inspect.jar
 ```
 
 `limit=50` is there so a zero-flag run never silently reads an entire
@@ -221,9 +221,9 @@ Any flag still overrides its file default individually — CLI always wins
 (see [Config precedence](#config-precedence)):
 
 ```bash
-java -jar target/kscan.jar --topic=kc-orders
-java -jar target/kscan.jar --from=latest
-java -jar target/kscan.jar --topic=kc-orders --kafka.bootstrap.servers=some-other-host:9092
+java -jar target/kafka-inspect.jar --topic=kc-orders
+java -jar target/kafka-inspect.jar --from=latest
+java -jar target/kafka-inspect.jar --topic=kc-orders --kafka.bootstrap.servers=some-other-host:9092
 ```
 
 ### A typical debugging session
@@ -234,13 +234,13 @@ specific:
 
 ```bash
 # 1. See what topics exist
-java -jar target/kscan.jar --list-topics
+java -jar target/kafka-inspect.jar --list-topics
 
 # 2. Oldest 50 messages, unfiltered (from=earliest is the default), to learn the shape
-java -jar target/kscan.jar --topic=orders --limit=50
+java -jar target/kafka-inspect.jar --topic=orders --limit=50
 
 # 3. Now scan for something specific
-java -jar target/kscan.jar --topic=orders --match.field=status=NEW
+java -jar target/kafka-inspect.jar --topic=orders --match.field=status=NEW
 ```
 
 Step 2 works for inspection because `--limit` isn't tied to filters — with
@@ -253,10 +253,10 @@ ones, no extra flag is needed — `--from=` already accepts an epoch-ms
 timestamp, or a human-readable date/time:
 
 ```bash
-java -jar target/kscan.jar --topic=orders --from=$(date -d '1 hour ago' +%s%3N) --limit=50
+java -jar target/kafka-inspect.jar --topic=orders --from=$(date -d '1 hour ago' +%s%3N) --limit=50
 
 # equivalent, using a human-readable date/time instead of epoch-ms
-java -jar target/kscan.jar --topic=orders --from="$(date -d '1 hour ago' '+%Y-%m-%d %H:%M:%S')" --limit=50
+java -jar target/kafka-inspect.jar --topic=orders --from="$(date -d '1 hour ago' '+%Y-%m-%d %H:%M:%S')" --limit=50
 ```
 
 `--until=` bounds the other end of a time range the same way, accepting the
@@ -265,7 +265,7 @@ those have no instant of their own to compare against):
 
 ```bash
 # everything from 9am to 10am on a given day
-java -jar target/kscan.jar --topic=orders \
+java -jar target/kafka-inspect.jar --topic=orders \
     --from="2026-10-15 09:00:00" --until="2026-10-15 10:00:00"
 ```
 
@@ -339,7 +339,7 @@ than hanging, and prints a `kafka-inspect: connecting to bootstrap.servers=...`
 line up front first, so it's clear what it was even trying to reach.
 
 ```bash
-java -jar target/kscan.jar --list-topics
+java -jar target/kafka-inspect.jar --list-topics
 ```
 
 ### Describing a topic
@@ -374,8 +374,8 @@ Byte sizes print in human-readable units (`B`/`KB`/`MB`/`GB`/`TB`, climbing
 the ladder as needed — e.g. `202.21 KB`, `3.89 MB`), not a raw byte count.
 
 ```bash
-java -jar target/kscan.jar --describe --topic=orders
-java -jar target/kscan.jar --describe --topic=orders --partition=0
+java -jar target/kafka-inspect.jar --describe --topic=orders
+java -jar target/kafka-inspect.jar --describe --topic=orders --partition=0
 ```
 
 ### Following a topic (tail -f)
@@ -389,7 +389,7 @@ on, like `tail -f`, or `--from=earliest` to replay everything first and then
 keep following — `--follow` doesn't change what `--from=` means.
 
 ```bash
-java -jar target/kscan.jar --topic=orders --from=latest --follow
+java -jar target/kafka-inspect.jar --topic=orders --from=latest --follow
 ```
 
 Stop it with Ctrl-C (or `SIGTERM`) — kafka-inspect catches both, prints the same
@@ -413,7 +413,7 @@ a whole batch, and pacing through an entire batch sequentially would make
 Ctrl-C take much longer than expected to actually stop anything.
 
 ```bash
-java -jar target/kscan.jar --topic=orders --follow --delay=500
+java -jar target/kafka-inspect.jar --topic=orders --follow --delay=500
 ```
 
 ### Restricting to one partition
@@ -426,7 +426,7 @@ to exactly one partition, so what you see is that partition's real,
 strictly-ordered sequence:
 
 ```bash
-java -jar target/kscan.jar --topic=orders --partition=1 --limit=10
+java -jar target/kafka-inspect.jar --topic=orders --partition=1 --limit=10
 ```
 
 A partition number the topic doesn't have exits 2 with a clear error
@@ -449,7 +449,7 @@ has one). The main use is pinpointing one already-known record, e.g. one
 you noticed in an earlier scan's `offset:` line:
 
 ```bash
-java -jar target/kscan.jar --topic=orders --partition=2 --from=offset:3801 --limit=1
+java -jar target/kafka-inspect.jar --topic=orders --partition=2 --from=offset:3801 --limit=1
 ```
 
 There's deliberately no separate "match by offset" filter for this — seeking
@@ -487,9 +487,9 @@ summary lines are unaffected):
   Avro deserializer, etc.) that needs the real bytes, not a decoded string.
 
 ```bash
-java -jar target/kscan.jar --topic=orders --output=json --limit=5 | jq .
-java -jar target/kscan.jar --topic=orders --output=count
-java -jar target/kscan.jar --topic=orders --partition=0 --from=offset:3801 --limit=1 --output=raw | xxd
+java -jar target/kafka-inspect.jar --topic=orders --output=json --limit=5 | jq .
+java -jar target/kafka-inspect.jar --topic=orders --output=count
+java -jar target/kafka-inspect.jar --topic=orders --partition=0 --from=offset:3801 --limit=1 --output=raw | xxd
 ```
 
 `--fields=<list>` restricts a **pretty** block to just the given
@@ -504,7 +504,7 @@ which prints no records at all — is a conflict (exit 2), not a silent
 no-op.
 
 ```bash
-java -jar target/kscan.jar --topic=orders --fields=headers,value --limit=5
+java -jar target/kafka-inspect.jar --topic=orders --fields=headers,value --limit=5
 ```
 
 ### Distinct values
@@ -540,8 +540,8 @@ line already always discloses the effective `limit=`, so a capped report
 is never mistaken for an exhaustive one.
 
 ```bash
-java -jar target/kscan.jar --topic=orders --output=distinct --distinct=header:source
-java -jar target/kscan.jar --topic=orders --output=distinct --distinct=field:status --match.field=region=eu
+java -jar target/kafka-inspect.jar --topic=orders --output=distinct --distinct=header:source
+java -jar target/kafka-inspect.jar --topic=orders --output=distinct --distinct=field:status --match.field=region=eu
 ```
 
 `--limit=<n>` stops a scan after `n` matches (default: `50`; `0` means
@@ -551,7 +551,7 @@ for scripting a wait-for-this-message check without an open-ended tail:
 
 ```bash
 # exits 0 as soon as 1 matching record shows up, however long that takes
-java -jar target/kscan.jar --topic=orders --from=latest --follow --limit=1 --match.key=order-42
+java -jar target/kafka-inspect.jar --topic=orders --from=latest --follow --limit=1 --match.key=order-42
 ```
 
 ### Filters
@@ -598,19 +598,19 @@ to scan and discard everything else first.
 
 ```bash
 # key contains "1003"
-java -jar target/kscan.jar --topic=kc-orders --match.key=1003
+java -jar target/kafka-inspect.jar --topic=kc-orders --match.key=1003
 
 # header AND field, combined
-java -jar target/kscan.jar --topic=kc-orders --match.header=source=web --match.field=status=NEW
+java -jar target/kafka-inspect.jar --topic=kc-orders --match.header=source=web --match.field=status=NEW
 
 # JSON field not-equals
-java -jar target/kscan.jar --topic=kc-orders-validated --match.field=status!=NEW
+java -jar target/kafka-inspect.jar --topic=kc-orders-validated --match.field=status!=NEW
 
 # substring regex on a JSON field
-java -jar target/kscan.jar --topic=kc-orders --match.field=orderId~^10
+java -jar target/kafka-inspect.jar --topic=kc-orders --match.field=orderId~^10
 
 # every timestamp on a given day (substring regex, anchored at the start)
-java -jar target/kscan.jar --topic=kc-orders --match.field=ts~^2026-10-22
+java -jar target/kafka-inspect.jar --topic=kc-orders --match.field=ts~^2026-10-22
 ```
 
 ### Config file
@@ -631,7 +631,7 @@ reporting a false "not found".
 you can override anything from the file without editing it mid-incident.
 
 ```bash
-SCANNER_TOPIC=kc-orders java -jar target/kscan.jar --kafka.bootstrap.servers=localhost:9092
+SCANNER_TOPIC=kc-orders java -jar target/kafka-inspect.jar --kafka.bootstrap.servers=localhost:9092
 # --topic=... on the CLI would win over SCANNER_TOPIC, which wins over topic= in the file
 ```
 
@@ -693,7 +693,7 @@ Connection info, progress, and summary counts go to stderr, so piping
 stdout to `jq` or counting lines is always safe.
 
 ```bash
-java -jar target/kscan.jar --topic=kc-hello --kafka.bootstrap.servers=localhost:9092 2>/dev/null
+java -jar target/kafka-inspect.jar --topic=kc-hello --kafka.bootstrap.servers=localhost:9092 2>/dev/null
 # -> only the pretty-printed record blocks, nothing else
 ```
 

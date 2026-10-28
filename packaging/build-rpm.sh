@@ -33,13 +33,13 @@ mvn "${mvn_args[@]}"
 # can't catch a bundled dependency class that itself targets newer
 # bytecode. This is the release gate for that: it fails the build, not
 # just the first JDK-8 run that happens to exercise the offending class.
-python3 packaging/check-bytecode.py target/kscan.jar
+python3 packaging/check-bytecode.py target/kafka-inspect.jar
 
 topdir="$repo_root/target/rpmbuild"
 rm -rf "$topdir"
 mkdir -p "$topdir"/{BUILD,RPMS,SRPMS,SOURCES,SPECS,BUILDROOT}
 
-cp target/kscan.jar "$topdir/SOURCES/kscan.jar"
+cp target/kafka-inspect.jar "$topdir/SOURCES/kafka-inspect.jar"
 cp bin/kafka-inspect "$topdir/SOURCES/kafka-inspect"
 # Deliberately NOT the dev-flavored scanner.properties at the repo root
 # (topic=kc-hello, kafka.bootstrap.servers=localhost:9092) -- a production

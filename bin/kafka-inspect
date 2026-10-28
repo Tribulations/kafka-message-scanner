@@ -13,7 +13,7 @@
 # "kafka-inspect", one consistent name everywhere; originally "kscan",
 # dropped since it read as one more short Kerberos k-tool next to
 # kinit/klist/kdestroy):
-#   /opt/kafka-inspect/kscan.jar
+#   /opt/kafka-inspect/kafka-inspect.jar
 #   /opt/kafka-inspect/bin/kafka-inspect          <- this script
 #   /usr/bin/kafka-inspect                                <- symlink to the above, for PATH convenience
 #   /etc/kafka-inspect/scanner.properties         <- default config (RPM-managed, %config(noreplace))
@@ -37,7 +37,7 @@ DEFAULT_CONFIG="/etc/kafka-inspect/scanner.properties"
 # resolve against /usr/bin and never find the jar next to the real script.
 script_path="$(readlink -f "$0")"
 install_dir="$(dirname "$(dirname "$script_path")")"
-jar_path="$install_dir/kscan.jar"
+jar_path="$install_dir/kafka-inspect.jar"
 
 if [ ! -f "$jar_path" ]; then
     echo "kafka-inspect: cannot find $jar_path (expected next to this script's install directory)" >&2
@@ -121,7 +121,7 @@ fi
 # Only inject the RPM-installed default config if the caller didn't already
 # pass their own --config= and that default actually exists -- this keeps the
 # wrapper working when it's copied/tested outside of an RPM install too (no
-# /etc/kafka-inspect, so kscan.jar's own install-relative lookup
+# /etc/kafka-inspect, so kafka-inspect.jar's own install-relative lookup
 # takes over instead).
 config_args=()
 if [ -f "$DEFAULT_CONFIG" ]; then

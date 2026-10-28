@@ -1,5 +1,5 @@
 # Built via packaging/build-rpm.sh, which supplies _version (from VERSION)
-# and _sourcedir (the staging directory it fills with kscan.jar,
+# and _sourcedir (the staging directory it fills with kafka-inspect.jar,
 # bin/kafka-inspect, and scanner.properties before invoking rpmbuild). Not
 # meant to be built directly with a bare `rpmbuild -bb` against this file
 # alone.
@@ -40,7 +40,7 @@ mkdir -p %{buildroot}/etc/kafka-inspect
 mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}%{_mandir}/man1
 
-install -m 0644 %{_sourcedir}/kscan.jar %{buildroot}/opt/kafka-inspect/kscan.jar
+install -m 0644 %{_sourcedir}/kafka-inspect.jar %{buildroot}/opt/kafka-inspect/kafka-inspect.jar
 install -m 0755 %{_sourcedir}/kafka-inspect %{buildroot}/opt/kafka-inspect/bin/kafka-inspect
 install -m 0644 %{_sourcedir}/scanner.properties %{buildroot}/etc/kafka-inspect/scanner.properties
 install -m 0644 %{_sourcedir}/scanner.properties.example %{buildroot}/etc/kafka-inspect/scanner.properties.example
@@ -50,7 +50,7 @@ ln -sf ../../opt/kafka-inspect/bin/kafka-inspect %{buildroot}/usr/bin/kafka-insp
 %files
 %dir /opt/kafka-inspect
 %dir /opt/kafka-inspect/bin
-/opt/kafka-inspect/kscan.jar
+/opt/kafka-inspect/kafka-inspect.jar
 /opt/kafka-inspect/bin/kafka-inspect
 /usr/bin/kafka-inspect
 %dir /etc/kafka-inspect
