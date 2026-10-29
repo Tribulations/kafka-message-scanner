@@ -31,4 +31,23 @@ class Utf8Test {
         // Distinguishing null (tombstone/keyless) from "" is load-bearing elsewhere (tombstone handling).
         assertNull(Utf8.decode(null));
     }
+
+    @Test
+    void encodeAndDecodeRoundTrip() {
+        String value = "café äöü 😀";
+
+        assertEquals(value, Utf8.decode(Utf8.encode(value)));
+    }
+
+    @Test
+    void encodeOfNullIsNull() {
+        assertNull(Utf8.encode(null));
+    }
+
+    @Test
+    void encodeOfEmptyStringIsAZeroLengthArrayNotNull() {
+        byte[] encoded = Utf8.encode("");
+
+        assertEquals(0, encoded.length);
+    }
 }

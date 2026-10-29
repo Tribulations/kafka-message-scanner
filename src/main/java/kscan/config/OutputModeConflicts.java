@@ -14,10 +14,100 @@ final class OutputModeConflicts {
 
     static void validate(ConfigBuilder.MutableValues values, CliArgs cli) throws ConfigLoadException {
         requireDescribeNotWithListTopics(cli);
+        requireProduceNotWithDescribeListTopicsFollow(cli);
         requireFieldsOnlyWithPrettyOutput(values, cli);
         requireDistinctAndOutputTogether(values, cli);
         requireDelayOnlyWithFollow(values, cli);
         requireRawOutputConstraints(values, cli);
+        requireExactlyOneOfValueValueFileTombstone(values, cli);
+        requireProduceFlagsOnlyWithProduce(values, cli);
+        requireProduceTopicGivenExplicitlyOnCli(cli);
+    }
+
+    /**
+     * --produce is a write operation, categorically different from every other mode flag (which
+     * only ever read) -- mutually exclusive with --describe/--list-topics (both "ask the cluster
+     * something and exit") and --follow (v1 sends exactly one message per invocation, there's
+     * nothing to keep following for).
+     */
+    private static void requireProduceNotWithDescribeListTopicsFollow(CliArgs cli) throws ConfigLoadException {
+        if (!cli.hasFlag("produce")) {
+            return;
+        }
+        if (cli.hasFlag("describe")) {
+            throw new ConfigLoadException("--produce and --describe are mutually exclusive -- give only one");
+        }
+        if (cli.hasFlag("list-topics")) {
+            throw new ConfigLoadException("--produce and --list-topics are mutually exclusive -- give only one");
+        }
+        if (cli.hasFlag("follow")) {
+            throw new ConfigLoadException(
+                    "--produce and --follow are mutually exclusive -- --produce sends exactly one "
+                            + "message per invocation, there's nothing to follow");
+        }
+    }
+
+    /**
+     * Exactly one of --value=/--value-file=/--tombstone must be given with --produce -- zero would
+     * leave the message body undefined, more than one is an ambiguous "which one did you mean"
+     * that this tool refuses to silently resolve by picking one.
+     */
+    private static void requireExactlyOneOfValueValueFileTombstone(ConfigBuilder.MutableValues values, CliArgs cli)
+            throws ConfigLoadException {
+        if (!cli.hasFlag("produce")) {
+            return;
+        }
+
+        int given = (values.value != null ? 1 : 0) + (values.valueFile != null ? 1 : 0)
+                + (values.tombstone ? 1 : 0);
+        if (given != 1) {
+            throw new ConfigLoadException(
+                    "--produce requires exactly one of --value=, --value-file=, or --tombstone (got " + given + ")");
+        }
+    }
+
+    /**
+     * --key=/--value=/--value-file=/--header=/--tombstone each only make sense alongside --produce
+     * -- given without it, they'd silently have zero effect, the same "conflict, not a no-op" rule
+     * every other produce/distinct/fields/etc. flag combination in this tool already follows.
+     */
+    private static void requireProduceFlagsOnlyWithProduce(ConfigBuilder.MutableValues values, CliArgs cli)
+            throws ConfigLoadException {
+        if (cli.hasFlag("produce")) {
+            return;
+        }
+        if (values.key != null) {
+            throw new ConfigLoadException("--key has no effect without --produce");
+        }
+        if (values.value != null) {
+            throw new ConfigLoadException("--value has no effect without --produce");
+        }
+        if (values.valueFile != null) {
+            throw new ConfigLoadException("--value-file has no effect without --produce");
+        }
+        if (!values.headers.isEmpty()) {
+            throw new ConfigLoadException("--header has no effect without --produce");
+        }
+        if (values.tombstone) {
+            throw new ConfigLoadException("--tombstone has no effect without --produce");
+        }
+    }
+
+    /**
+     * {@code ConfigBuilder.requireTopic} only checks the *merged* topic value, which a config
+     * file's topic= or SCANNER_TOPIC could satisfy on its own. For a read, a stale persisted topic
+     * default is harmless (a wrong but harmless scan); for a write, it means publishing to whatever
+     * topic a config file happens to default to -- a materially worse failure mode, the same hazard
+     * {@code ScannerConfig.partition()}'s own javadoc already names as the reason --partition= is
+     * CLI-only. Layered on top of, not a replacement for, the existing requireTopic check.
+     */
+    private static void requireProduceTopicGivenExplicitlyOnCli(CliArgs cli) throws ConfigLoadException {
+        if (cli.hasFlag("produce") && cli.getSingle("topic") == null) {
+            throw new ConfigLoadException(
+                    "--produce requires --topic= given explicitly on the command line "
+                            + "(not just a config-file/env default) -- a write must never land on "
+                            + "whatever topic happens to be a stale scan default");
+        }
     }
 
     /** --describe and --list-topics are both "ask the cluster something, print it, exit" operations -- give only one. */
@@ -43,6 +133,9 @@ final class OutputModeConflicts {
         }
         if (cli.hasFlag("describe")) {
             throw new ConfigLoadException("--fields has no effect with --describe -- give only one");
+        }
+        if (cli.hasFlag("produce")) {
+            throw new ConfigLoadException("--fields has no effect with --produce -- give only one");
         }
         if (!values.output.equalsIgnoreCase("pretty")) {
             throw new ConfigLoadException(
@@ -79,6 +172,9 @@ final class OutputModeConflicts {
         if (cli.hasFlag("describe")) {
             throw new ConfigLoadException("--distinct has no effect with --describe -- give only one");
         }
+        if (cli.hasFlag("produce")) {
+            throw new ConfigLoadException("--distinct has no effect with --produce -- give only one");
+        }
         if (values.follow) {
             throw new ConfigLoadException(
                     "--output=distinct does not support --follow yet -- give one or the other");
@@ -101,6 +197,13 @@ final class OutputModeConflicts {
             throws ConfigLoadException {
         if (values.delay == 0) {
             return;
+        }
+        // Checked before the generic "needs --follow" rejection below: --produce can never be
+        // combined with --follow anyway (requireProduceNotWithDescribeListTopicsFollow), so telling
+        // a --produce --delay= caller to "add --follow" would just walk them into a second, more
+        // confusing rejection -- the real, actionable reason is "no effect with --produce" directly.
+        if (cli.hasFlag("produce")) {
+            throw new ConfigLoadException("--delay has no effect with --produce -- give only one");
         }
         if (!values.follow) {
             throw new ConfigLoadException(
@@ -137,6 +240,9 @@ final class OutputModeConflicts {
         }
         if (cli.hasFlag("describe")) {
             throw new ConfigLoadException("--output=raw has no effect with --describe -- give only one");
+        }
+        if (cli.hasFlag("produce")) {
+            throw new ConfigLoadException("--output=raw has no effect with --produce -- give only one");
         }
         if (values.follow) {
             throw new ConfigLoadException("--output=raw does not support --follow -- give one or the other");

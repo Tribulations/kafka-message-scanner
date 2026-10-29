@@ -1,6 +1,6 @@
 .TH KAFKA-INSPECT 1 "2026-10-19" "kafka-inspect" "User Commands"
 .SH NAME
-kafka-inspect \- scan or describe a Kafka topic (messages matching a key/header/field, or size/metadata)
+kafka-inspect \- scan, describe, or produce to a Kafka topic (messages matching a key/header/field, size/metadata, or sending one message)
 .SH SYNOPSIS
 .B kafka-inspect
 .B \-\-topic=\fIname\fR
@@ -9,9 +9,13 @@ kafka-inspect \- scan or describe a Kafka topic (messages matching a key/header/
 .B kafka-inspect
 is a debugging/analysis CLI that answers "did this message land in this
 topic, and what does it look like?" and "how big is this topic?" against a
-real Kafka cluster. It is read-only: it never joins a consumer group, never
-commits offsets, and never alters/creates/deletes anything, so it is safe
-to run against production topics without affecting any real consumer.
+real Kafka cluster. Every flag except
+.B \-\-produce
+is read-only: it never joins a consumer group and never commits offsets.
+.B \-\-produce
+is this tool's only write operation \- it sends exactly one message to a
+topic and exits; it never auto-creates a missing topic (a hard error
+instead), and every other flag is unaffected by its existence.
 .PP
 This page gives a short synopsis and a set of worked debugging examples.
 For the authoritative, complete list of flags, their accepted values, and
@@ -107,6 +111,13 @@ Extract one message's exact original bytes (no decoding, no envelope)
 kafka-inspect \-\-topic=orders \-\-partition=0 \-\-from=offset:3801 \-\-limit=1 \-\-output=raw | xxd
 .EE
 .RE
+.TP
+Send a message to a topic (this tool's only write operation; fails if the topic doesn't exist)
+.RS
+.EX
+kafka-inspect \-\-produce \-\-topic=orders \-\-key=order\-42 \-\-header=source=web \-\-value='{"id":42}'
+.EE
+.RE
 .SH FILES
 .TP
 .I /etc/kafka-inspect/scanner.properties
@@ -143,6 +154,11 @@ Ran cleanly, zero matches.
 .TP
 .B 2
 Error (bad config/args, topic doesn't exist, broker unreachable, etc.).
+.PP
+.B \-\-produce
+is the one exception to this table: it only ever exits 0 (sent) or 2
+(error) \- there is no 1, since "zero matches" has no equivalent for a
+write.
 .SH SEE ALSO
 .B kafka-inspect \-\-help
 for the complete flag reference.

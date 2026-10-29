@@ -60,6 +60,22 @@ final class CliOverrides {
         }
         values.kafkaProps.putAll(cli.kafkaPassthrough());
         values.jvmProps.putAll(cli.jvmPassthrough());
+
+        if (cli.getSingle("key") != null) {
+            values.key = cli.getSingle("key");
+        }
+        if (cli.getSingle("value") != null) {
+            values.value = cli.getSingle("value");
+        }
+        if (cli.getSingle("value-file") != null) {
+            values.valueFile = cli.getSingle("value-file");
+        }
+        if (!cli.getAll("header").isEmpty()) {
+            values.headers = cli.getAll("header");
+        }
+        if (cli.hasFlag("tombstone")) {
+            values.tombstone = true;
+        }
     }
 
     /**

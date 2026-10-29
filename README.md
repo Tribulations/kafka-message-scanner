@@ -4,9 +4,11 @@ A standalone command-line tool for debugging and inspecting real Kafka
 topics. It answers "did a specific message make it into this topic, and if
 so, what does it look like?" — scanning a topic (bounded scan or live tail)
 and reporting whether records exist matching a given key, header, and/or
-JSON field value — and, separately, "how big is this topic, and what does
-its offset range look like?" via `--describe`. Debugging utility, not a
-library or a service — it runs, prints a result, and exits.
+JSON field value — "how big is this topic, and what does its offset range
+look like?" via `--describe` — and, since `--produce`, "send a message to
+this topic" too. `--produce` is this tool's only write operation; every
+other flag only ever reads. Debugging utility, not a library or a service —
+it runs, prints a result, and exits.
 
 ## Table of Contents
 
@@ -19,6 +21,7 @@ library or a service — it runs, prints a result, and exits.
   - [Flags](#flags)
   - [Listing topics](#listing-topics)
   - [Describing a topic](#describing-a-topic)
+  - [Producing a message](#producing-a-message)
   - [Following a topic (tail -f)](#following-a-topic-tail--f)
   - [Restricting to one partition](#restricting-to-one-partition)
   - [Jumping to a known offset](#jumping-to-a-known-offset)
@@ -301,7 +304,13 @@ gets a specific message instead of a generic "unknown flag".
 | `--config=<path>` | no | next to the jar | Path to a `scanner.properties`-style file |
 | `--list-topics` | no | off | List topic names on the cluster and exit; `--topic=` not required |
 | `--describe` | no | off | Print a per-partition size/metadata summary for `--topic=` (required) and exit; combine with `--partition=` to restrict to one (see [Describing a topic](#describing-a-topic)) |
-| `--kafka.<prop>=<val>` | no | — | Kafka client property passthrough, repeatable for different keys; `<prop>` must be a real consumer client property name (see below) |
+| `--produce` | no | off | Send one message to `--topic=` (required, given explicitly on the CLI) and exit — this tool's only write operation (see [Producing a message](#producing-a-message)) |
+| `--key=<string>` | no | none (unkeyed) | The `--produce` message key (CLI-only) |
+| `--value=<string>` | exactly one of these three, with `--produce` | — | The `--produce` message value, as a literal string (CLI-only) |
+| `--value-file=<path>` | — | — | Read the `--produce` message value from this file, as raw bytes (binary-safe, CLI-only) |
+| `--tombstone` | — | — | Send a null value for `--produce` (CLI-only) |
+| `--header=<n>=<v>` | no | — | A header to attach to the `--produce` message; repeatable, sent as given (CLI-only) |
+| `--kafka.<prop>=<val>` | no | — | Kafka client property passthrough, repeatable for different keys; `<prop>` must be a real client property name for the operation in effect (see below) |
 | `--jvm.<prop>=<val>` | no | — | Arbitrary JVM system property, applied via `System.setProperty` before the consumer is built (see [SASL / Kerberos](#sasl--kerberos)) |
 | `--match.key=<val>` | no | — | Match records whose key contains `<val>` (see [Filters](#filters)) |
 | `--match.header=<n>=<v>` | no | — | Match records with header `<n>` containing `<v>`; repeatable, ANDed together |
@@ -310,7 +319,7 @@ gets a specific message instead of a generic "unknown flag".
 | `--match.case-sensitive` | no | off | Compare `match.key`/`match.header` case-sensitively |
 | `--limit=<n>` | no | `50` (0 = unlimited, only via an explicit `--limit=0`) | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
 | `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
-| `--partition=<n>` | no | all, interleaved | Restrict the scan to one partition (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
+| `--partition=<n>` | no | all, interleaved | Restrict a scan/`--describe` to one partition, or pin which partition `--produce` sends to (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
 | `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` \| `distinct` (see [Output modes](#output-modes)) |
 | `--fields=<list>` | no | all | Restrict a pretty-output block to comma-separated sections: `metadata`, `key`, `headers`, `value` (CLI-only; only valid with `--output=pretty`, see [Output modes](#output-modes)) |
 | `--distinct=<spec>` | only with `--output=distinct` | — | `key` \| `header:<name>` \| `field:<path>` to count (CLI-only, see [Distinct values](#distinct-values)) |
@@ -320,14 +329,20 @@ gets a specific message instead of a generic "unknown flag".
 or config file) — there's no safe default for "which cluster". Every
 `--kafka.<prop>=` key is checked at startup against the real property
 names of whichever Kafka client the run actually uses — the consumer
-client's property names for a normal scan or `--list-topics`, or the
-*admin* client's for `--describe` (it never opens a consumer at all, see
-[Describing a topic](#describing-a-topic)) — an unrecognized one (e.g. a
-typo like `bootstrap-server` instead of `bootstrap.servers`, or a
-consumer-only tuning key like `max.poll.records` given alongside
-`--describe`) is a hard error, with a "did you mean...?" suggestion when
-one is close, rather than silently having no effect while the real
-property keeps whatever value a config file or default already gave it.
+client's property names for a normal scan or `--list-topics`, the *admin*
+client's for `--describe` (it never opens a consumer at all, see
+[Describing a topic](#describing-a-topic)), or the *producer* client's for
+`--produce` (see [Producing a message](#producing-a-message)) — an
+unrecognized one (e.g. a typo like `bootstrap-server` instead of
+`bootstrap.servers`, or a consumer-only tuning key like `max.poll.records`
+given alongside `--describe`) is a hard error, with a "did you mean...?"
+suggestion when one is close, rather than silently having no effect while
+the real property keeps whatever value a config file or default already
+gave it. (`--produce`'s own Admin pre-check — confirming the target topic
+exists before anything is sent — reuses whatever of this same `kafka.*`
+bag Admin actually recognizes; it's never re-validated against a narrower
+set, since the producer client's validation above is already authoritative
+for the whole bag.)
 
 ### Listing topics
 
@@ -376,6 +391,50 @@ the ladder as needed — e.g. `202.21 KB`, `3.89 MB`), not a raw byte count.
 ```bash
 java -jar target/kafka-inspect.jar --describe --topic=orders
 java -jar target/kafka-inspect.jar --describe --topic=orders --partition=0
+```
+
+### Producing a message
+
+`--produce` sends exactly one message to `--topic=` and exits — this tool's
+only write operation (every other flag, including `--describe`, only ever
+reads). `--topic=` must be given explicitly on the command line for a
+produce run, even if a config file or `SCANNER_TOPIC` already sets one: a
+stale persisted topic default is harmless for a read, but publishing to
+whatever topic happens to be a config-file default is a materially worse
+mistake, so it's rejected rather than silently allowed.
+
+Exactly one of `--value=` (a literal string), `--value-file=<path>` (raw
+bytes, binary-safe — not UTF-8-decoded, for payloads that don't belong on a
+command line), or `--tombstone` (a null value) is required. `--key=` is
+optional (an unkeyed message by default, not an empty one). `--header=` is
+repeatable and sent as given — unlike `--match.header=`, these aren't
+ANDed together, they're just the headers to attach. `--partition=<n>`
+(the same flag `--describe`/a scan already use to restrict what they read)
+pins which partition the message is sent to instead; left unset, the
+producer's own default partitioner decides.
+
+If the target topic doesn't exist, `--produce` fails with a clear error
+(exit 2) rather than letting it be silently auto-created — confirmed
+directly against a real broker that `kafka-inspect`'s own existence check
+(`Admin.describeTopics`) never itself triggers topic auto-creation, unlike
+a Producer/Consumer metadata fetch. There's no interactive confirmation
+prompt either way: this tool is built for unattended/scripted use (cron,
+CI, SSH with no tty), and nothing in it reads stdin.
+
+**Exit codes are 0 (sent) or 2 (error) only — there is no exit code 1.**
+A scan's "1 = ran cleanly with zero matches" has no equivalent for a write;
+don't assume the usual 0/1/2 mapping applies here.
+
+```bash
+# plain value
+java -jar target/kafka-inspect.jar --produce --topic=orders --value='{"id":1,"status":"NEW"}'
+
+# key + headers + a specific partition
+java -jar target/kafka-inspect.jar --produce --topic=orders --key=order-42 \
+    --header=source=web --header=env=prod --partition=0 --value='{"id":42}'
+
+# a tombstone (null value) for a given key
+java -jar target/kafka-inspect.jar --produce --topic=orders --key=order-42 --tombstone
 ```
 
 ### Following a topic (tail -f)
@@ -685,6 +744,11 @@ Stable scriptability contract — documented and kept stable across releases:
 | `1` | Ran cleanly, zero matches |
 | `2` | Error (bad config/args, topic doesn't exist, broker unreachable, etc.) |
 
+**`--produce` is the one exception to this table: it only ever exits `0`
+(sent) or `2` (error) — there is no `1`.** A scan's "1 = ran cleanly with
+zero matches" has no equivalent for a write; don't assume the usual 0/1/2
+mapping applies to a produce run.
+
 ### stdout / stderr contract
 
 stdout contains **only** the output the selected `--output=` mode promises
@@ -813,22 +877,25 @@ scanner.properties       config file template, fully commented
 kafka_client_jaas.conf.example   external JAAS file example for Kerberos
 src/main/java/kscan/
   Main.java                 entry point only: System.exit(KscanApp.run(args))
-  KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics/describe -> exit code
+  KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics/describe/produce -> exit code
   KscanCli.java             kafka-inspect's flag schema, --help text, and CLI parsing wiring
-  StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/admin-props/filter/etc.
+  StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/admin-props/producer-props/filter/etc.
   ScanRunner.java           opens the consumer, runs the scan or --list-topics, reports the result
   DescribeRunner.java       opens an Admin client and runs --describe, reports the result
-  RunSummary.java           builds the stderr connecting/result summary lines ScanRunner/DescribeRunner print
+  ProduceRunner.java        opens an Admin client (topic-existence check) then a Producer, sends --produce's message
+  RunSummary.java           builds the stderr connecting/result summary lines ScanRunner/DescribeRunner/ProduceRunner print
   ScanRiskWarnings.java     builds the stderr WARNING lines for costly scan shapes (see below)
   ShutdownCoordinator.java  Ctrl-C/SIGTERM handling so --follow exits 0/1/2, never 143
   ExitSignal.java           shared exit-code-carrying exception used across the above
-  admin/                 --describe's Admin-based size/metadata fetching and plain-text formatting
+  admin/                 --describe's Admin-based size/metadata fetching and plain-text formatting, plus
+                         TopicExistenceChecker (shared with --produce's own pre-send existence check)
   cli/                   strict CLI argument parsing
   config/                config file + env + CLI merge and validation
-  kafka/                 the two classes that touch connection/auth settings (consumer and admin)
+  kafka/                 the three classes that touch connection/auth settings (consumer, admin, producer)
   scan/                  pure scan/filter logic (testable without a broker)
   filter/                match.key/match.header/match.field filters, ANDed together
   output/                output writers: pretty, json (NDJSON), count
+  produce/               --produce's record-building (ProducerRecordBuilder) and send (MessageSender) logic
 src/test/java/kscan/     unit tests (MockConsumer-based)
 bin/kafka-inspect        wrapper script: resolves Java 8+, injects default --config=, execs the jar
 packaging/kafka-inspect.spec   RPM spec (package name, installed command, and /etc/ folder are all "kafka-inspect"):

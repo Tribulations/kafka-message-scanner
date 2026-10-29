@@ -28,10 +28,13 @@ BuildArch:      noarch
 %description
 kafka-inspect scans a Kafka topic (a bounded scan, or a live --follow tail)
 and reports whether records exist matching a given key, header, and/or JSON
-field value, or describes one (--describe: per-partition message count and
-best-effort on-disk byte size). It is a debugging/analysis tool only: it never joins a
+field value, describes one (--describe: per-partition message count and
+best-effort on-disk byte size), or sends a single message to one
+(--produce). Every flag except --produce is read-only: it never joins a
 consumer group and never commits offsets, so it is safe to run against
-production topics without affecting any real consumer group.
+production topics without affecting any real consumer group. --produce is
+this tool's only write operation and fails rather than auto-creating a
+missing topic.
 
 %install
 rm -rf %{buildroot}

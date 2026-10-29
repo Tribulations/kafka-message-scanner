@@ -476,6 +476,178 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void produceWithValueIsFine(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello"), configFile, Collections.emptyMap());
+        assertEquals("hello", config.value());
+    }
+
+    @Test
+    void produceConflictsWithDescribe(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--describe"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void produceConflictsWithListTopics(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--list-topics"), configFile,
+                Collections.emptyMap()));
+    }
+
+    @Test
+    void produceConflictsWithFollow(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--follow"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void produceConflictsWithFields(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--fields=value"), configFile,
+                Collections.emptyMap()));
+    }
+
+    @Test
+    void produceConflictsWithDistinct(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--output=distinct", "--distinct=key"),
+                configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void produceConflictsWithDelay(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        // Asserts on the exact message, not just the exception type: the produce-specific check
+        // must fire before the generic "--delay needs --follow" one, otherwise the error tells the
+        // user to add --follow, which then conflicts with --produce too -- a confusing dead end
+        // caught by review, not by a type-only assertion.
+        ConfigLoadException e = assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--delay=500"), configFile,
+                Collections.emptyMap()));
+        assertTrue(e.getMessage().contains("--delay has no effect with --produce"));
+    }
+
+    @Test
+    void produceWithAnEmptyValueIsAcceptedNotTreatedAsAbsent(@TempDir Path dir) throws Exception {
+        // CliArgs.getSingle("value") returns "" (not null) for a bare --value=, so this must be
+        // accepted as a deliberate empty-string message, not rejected as "zero of value/value-file/
+        // tombstone given".
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value="), configFile, Collections.emptyMap());
+        assertEquals("", config.value());
+    }
+
+    @Test
+    void produceConflictsWithRawOutput(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--output=raw", "--limit=1"), configFile,
+                Collections.emptyMap()));
+    }
+
+    @Test
+    void produceRequiresExactlyOneOfValueValueFileTombstoneZeroGiven(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void produceRequiresExactlyOneOfValueValueFileTombstoneTwoGiven(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value=hello", "--tombstone"), configFile,
+                Collections.emptyMap()));
+    }
+
+    @Test
+    void produceWithTombstoneAloneIsFine(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--tombstone"), configFile, Collections.emptyMap());
+        assertEquals(true, config.tombstone());
+    }
+
+    @Test
+    void produceWithValueFileAloneIsFine(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(
+                cli("--produce", "--topic=orders", "--value-file=/some/path"), configFile, Collections.emptyMap());
+        assertEquals("/some/path", config.valueFile());
+    }
+
+    @Test
+    void keyWithoutProduceHasNoEffect(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--key=order-42"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void valueWithoutProduceHasNoEffect(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--value=hello"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void valueFileWithoutProduceHasNoEffect(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--value-file=/some/path"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void headerWithoutProduceHasNoEffect(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--header=a=b"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void tombstoneWithoutProduceHasNoEffect(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--tombstone"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void produceRequiresTopicGivenExplicitlyOnCliNotJustFromAConfigFileDefault(@TempDir Path dir) {
+        // The config file supplies a topic default -- harmless for a read, but a write must never
+        // silently land on a stale persisted default, so --produce requires --topic= on the CLI too.
+        Path configFile = writeConfigUnchecked(dir, "topic=from-file\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--produce", "--value=hello"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void configFileReflectsTheActualResolvedPathWhenOneWasUsed(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -532,15 +704,17 @@ class ConfigBuilderTest {
 
     private static Set<String> knownValueKeys() {
         return setOf("config", "topic", "from", "until", "limit", "max-messages", "partition", "output", "fields",
-                "distinct", "delay", "match.key", "match.header", "match.field");
+                "distinct", "delay", "match.key", "match.header", "match.field",
+                "key", "value", "value-file", "header");
     }
 
     private static Set<String> knownBooleanKeys() {
-        return setOf("help", "list-topics", "describe", "follow", "match.exact", "match.case-sensitive");
+        return setOf("help", "list-topics", "describe", "follow", "match.exact", "match.case-sensitive",
+                "produce", "tombstone");
     }
 
     private static Set<String> repeatableKeys() {
-        return setOf("match.header", "match.field");
+        return setOf("match.header", "match.field", "header");
     }
 
     private static Set<String> setOf(String... values) {

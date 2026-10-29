@@ -1,6 +1,8 @@
 package kscan.config;
 
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 
 /**
@@ -25,6 +27,11 @@ public final class ScannerConfig {
     private final Properties kafkaProperties;
     private final Properties jvmProperties;
     private final MatchConfig match;
+    private final String key;
+    private final String value;
+    private final String valueFile;
+    private final List<String> headers;
+    private final boolean tombstone;
 
     private ScannerConfig(Builder b) {
         this.topic = b.topic;
@@ -41,6 +48,11 @@ public final class ScannerConfig {
         this.kafkaProperties = b.kafkaProperties;
         this.jvmProperties = b.jvmProperties;
         this.match = b.match;
+        this.key = b.key;
+        this.value = b.value;
+        this.valueFile = b.valueFile;
+        this.headers = b.headers;
+        this.tombstone = b.tombstone;
     }
 
     /** Starts building a new {@link ScannerConfig}. */
@@ -122,6 +134,31 @@ public final class ScannerConfig {
         return match;
     }
 
+    /** CLI-only (no file/env form): the --produce message key, or null if unset (an unkeyed message). */
+    public String key() {
+        return key;
+    }
+
+    /** CLI-only (no file/env form): the --produce message value as a literal string, or null if unset. */
+    public String value() {
+        return value;
+    }
+
+    /** CLI-only (no file/env form): a path to read the --produce message value from, or null if unset. */
+    public String valueFile() {
+        return valueFile;
+    }
+
+    /** CLI-only (no file/env form): raw "name=value" --header= entries for --produce, in the order given. */
+    public List<String> headers() {
+        return headers;
+    }
+
+    /** CLI-only (no file/env form): whether --produce should send a tombstone (null value). */
+    public boolean tombstone() {
+        return tombstone;
+    }
+
     /** Builder for {@link ScannerConfig}. */
     public static final class Builder {
         private String topic;
@@ -138,6 +175,11 @@ public final class ScannerConfig {
         private Properties kafkaProperties;
         private Properties jvmProperties;
         private MatchConfig match;
+        private String key;
+        private String value;
+        private String valueFile;
+        private List<String> headers = Collections.emptyList();
+        private boolean tombstone;
 
         private Builder() {
         }
@@ -236,6 +278,36 @@ public final class ScannerConfig {
 
         public Builder match(MatchConfig match) {
             this.match = match;
+            return this;
+        }
+
+        /** CLI-only (no file/env form): a persisted produce key would be actively dangerous, not just unhelpful. */
+        public Builder key(String key) {
+            this.key = key;
+            return this;
+        }
+
+        /** CLI-only (no file/env form) -- see {@link #key(String)}. */
+        public Builder value(String value) {
+            this.value = value;
+            return this;
+        }
+
+        /** CLI-only (no file/env form) -- see {@link #key(String)}. */
+        public Builder valueFile(String valueFile) {
+            this.valueFile = valueFile;
+            return this;
+        }
+
+        /** CLI-only (no file/env form) -- see {@link #key(String)}. */
+        public Builder headers(List<String> headers) {
+            this.headers = headers;
+            return this;
+        }
+
+        /** CLI-only (no file/env form) -- see {@link #key(String)}. */
+        public Builder tombstone(boolean tombstone) {
+            this.tombstone = tombstone;
             return this;
         }
 

@@ -63,6 +63,11 @@ public final class ConfigBuilder {
                 .kafkaProperties(values.kafkaProps)
                 .jvmProperties(values.jvmProps)
                 .match(match)
+                .key(values.key)
+                .value(values.value)
+                .valueFile(values.valueFile)
+                .headers(values.headers)
+                .tombstone(values.tombstone)
                 .build();
     }
 
@@ -123,6 +128,11 @@ public final class ConfigBuilder {
         boolean matchCaseSensitive;
         final Properties kafkaProps = new Properties();
         final Properties jvmProps = new Properties();
+        String key;
+        String value;
+        String valueFile;
+        List<String> headers = new ArrayList<>();
+        boolean tombstone;
     }
 
     /** The resolved config file path, plus whether it was explicitly given (vs. the install-relative default). */

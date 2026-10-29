@@ -8,10 +8,13 @@ import kscan.filter.RecordFilter;
 import kscan.filter.RecordFilterFactory;
 import kscan.kafka.AdminPropertiesFactory;
 import kscan.kafka.ConsumerPropertiesFactory;
+import kscan.kafka.ProducerPropertiesFactory;
 import kscan.output.DistinctSpec;
 import kscan.output.OutputField;
 import kscan.output.OutputMode;
+import kscan.produce.ProducerRecordBuilder;
 import kscan.scan.StartPosition;
+import org.apache.kafka.clients.producer.ProducerRecord;
 
 import java.util.Properties;
 import java.util.Set;
@@ -56,6 +59,35 @@ final class StartupPipeline {
     static Properties buildAdminProperties(ScannerConfig config) throws ExitSignal {
         try {
             return AdminPropertiesFactory.build(config.kafkaProperties());
+        } catch (ConfigLoadException e) {
+            throw new ExitSignal(2, e.getMessage());
+        }
+    }
+
+    /**
+     * Producer-validated properties for {@code --produce} -- this is the authoritative validation
+     * of the whole kafka.* bag for a produce run (see {@link ProducerPropertiesFactory}'s class doc).
+     */
+    static Properties buildProducerProperties(ScannerConfig config) throws ExitSignal {
+        try {
+            return ProducerPropertiesFactory.build(config.kafkaProperties());
+        } catch (ConfigLoadException e) {
+            throw new ExitSignal(2, e.getMessage());
+        }
+    }
+
+    /**
+     * Admin properties for {@code --produce}'s topic-existence pre-check, filtered from the same
+     * bag {@link #buildProducerProperties} already validated in full -- never re-validated against
+     * a narrower Admin-only set (see {@link AdminPropertiesFactory#buildForProduce}).
+     */
+    static Properties buildAdminPropertiesForProduce(ScannerConfig config) {
+        return AdminPropertiesFactory.buildForProduce(config.kafkaProperties());
+    }
+
+    static ProducerRecord<byte[], byte[]> buildProducerRecord(ScannerConfig config) throws ExitSignal {
+        try {
+            return ProducerRecordBuilder.build(config);
         } catch (ConfigLoadException e) {
             throw new ExitSignal(2, e.getMessage());
         }

@@ -7,23 +7,20 @@ import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.TopicPartitionInfo;
-import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
-import java.util.concurrent.ExecutionException;
 
 /**
  * Fetches the required (never best-effort) part of a {@code --describe} run: a topic's partition
  * list and each partition's offset range, via {@link Admin} -- never a
  * {@link org.apache.kafka.clients.consumer.Consumer}, since describing a topic's metadata doesn't
- * need one. Mirrors {@link kscan.scan.PartitionResolver}'s validation wording for a missing topic
- * or partition, but can't share its code (that class is {@code Consumer}-typed).
+ * need one. Existence/partition-range validation delegates to {@link TopicExistenceChecker} (also
+ * used by {@code --produce}'s own pre-send check).
  */
 public final class TopicSizeFetcher {
 
@@ -40,11 +37,11 @@ public final class TopicSizeFetcher {
      */
     public static TopicSizeSummary fetchOffsets(Admin admin, String topic, Integer partition)
             throws ScanException {
-        TopicDescription description = describeTopic(admin, topic);
+        TopicDescription description = TopicExistenceChecker.describeTopic(admin, topic);
         List<TopicPartitionInfo> all = new ArrayList<>(description.partitions());
         all.sort(Comparator.comparingInt(TopicPartitionInfo::partition));
 
-        List<TopicPartitionInfo> wanted = restrictToPartition(topic, all, partition);
+        List<TopicPartitionInfo> wanted = TopicExistenceChecker.restrictToPartition(topic, all, partition);
         List<TopicPartition> topicPartitions = new ArrayList<>();
         for (TopicPartitionInfo p : wanted) {
             topicPartitions.add(new TopicPartition(topic, p.partition()));
@@ -65,36 +62,6 @@ public final class TopicSizeFetcher {
         }
 
         return new TopicSizeSummary(topic, all.size(), summaries, null);
-    }
-
-    private static TopicDescription describeTopic(Admin admin, String topic) throws ScanException {
-        try {
-            return admin.describeTopics(Collections.singletonList(topic)).topicNameValues().get(topic).get();
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof UnknownTopicOrPartitionException) {
-                throw new ScanException("topic '" + topic + "' does not exist or has no partitions");
-            }
-
-            throw new ScanException("failed to describe topic '" + topic + "': " + e.getMessage(), e);
-        } catch (Exception e) {
-            throw new ScanException("failed to describe topic '" + topic + "': " + e.getMessage(), e);
-        }
-    }
-
-    /** Restricts the describe to the one requested partition, failing clearly if the topic doesn't have it. */
-    private static List<TopicPartitionInfo> restrictToPartition(String topic, List<TopicPartitionInfo> all,
-                                                                  Integer partition) throws ScanException {
-        if (partition == null) {
-            return all;
-        }
-        for (TopicPartitionInfo p : all) {
-            if (p.partition() == partition) {
-                return Collections.singletonList(p);
-            }
-        }
-
-        throw new ScanException("topic '" + topic + "' has no partition " + partition
-                + " (it has " + all.size() + " partition(s): 0.." + (all.size() - 1) + ")");
     }
 
     private static Map<TopicPartition, OffsetSpec> toOffsetSpecMap(List<TopicPartition> partitions,

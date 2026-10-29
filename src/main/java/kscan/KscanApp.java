@@ -7,6 +7,7 @@ import kscan.output.DistinctSpec;
 import kscan.output.OutputField;
 import kscan.output.OutputMode;
 import kscan.scan.StartPosition;
+import org.apache.kafka.clients.producer.ProducerRecord;
 
 import java.util.Properties;
 import java.util.Set;
@@ -38,6 +39,14 @@ final class KscanApp {
                 Properties adminProps = StartupPipeline.buildAdminProperties(config);
 
                 return DescribeRunner.describe(adminProps, config);
+            }
+
+            if (cli.hasFlag("produce")) {
+                Properties producerProps = StartupPipeline.buildProducerProperties(config);
+                Properties adminProps = StartupPipeline.buildAdminPropertiesForProduce(config);
+                ProducerRecord<byte[], byte[]> record = StartupPipeline.buildProducerRecord(config);
+
+                return ProduceRunner.produce(adminProps, producerProps, config, record);
             }
 
             Properties kafkaProps = StartupPipeline.buildKafkaProperties(config);
