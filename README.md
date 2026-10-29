@@ -641,6 +641,26 @@ its own mini-language (unaffected by `--match.exact`/`--match.case-sensitive`):
   starting with that date, i.e. every timestamp on that day regardless of
   time of day.
 
+There's **no glob/wildcard support** — `*` in a `path=value` spec is a
+literal character, not a wildcard, so `--match.field=mountain=*` looks for
+a field whose value is the single character `*`, which real data almost
+never has (confirmed: it returns 0 matches against a real `mountain:
+"everest"` field). `path~regex` is the way to express "any value" or a
+partial/wildcard-style match instead, since it's a real regex, not a glob:
+`mountain~.*` matches any value in that field (including an empty one,
+the closest thing to a true wildcard here), and `mountain~ever` matches
+any value *containing* `ever` (e.g. `"everest"`, `"neverest"`).
+
+**Quote a `path~regex` that contains a shell-meaningful character** (`*`,
+`?`, `[`, `]`) — e.g. `--match.field='mountain~.*'`, not
+`--match.field=mountain~.*`. Without quotes, your shell (zsh in
+particular, with its default `nomatch` option) may try to glob-expand the
+pattern as filenames in the current directory, find none, and abort the
+whole command with `zsh: no matches found: ...` before kafka-inspect ever
+sees the argument — this looks exactly like kafka-inspect silently
+rejecting or ignoring the flag, but it's a shell-level failure that never
+reaches the program at all.
+
 A record whose value isn't valid JSON is skipped (never matches), not an
 error — this tool is meant to be pointed at real, messy production topics
 that mix formats. `--match.field` is repeatable for multiple fields (all
@@ -670,6 +690,10 @@ java -jar target/kafka-inspect.jar --topic=kc-orders --match.field=orderId~^10
 
 # every timestamp on a given day (substring regex, anchored at the start)
 java -jar target/kafka-inspect.jar --topic=kc-orders --match.field=ts~^2026-10-22
+
+# "wildcard" match: any value in this field, via regex (there's no glob "*")
+# quoted, so the shell doesn't glob-expand the ".*" as filenames first
+java -jar target/kafka-inspect.jar --topic=kc-orders --match.field='mountain~.*'
 ```
 
 ### Config file
