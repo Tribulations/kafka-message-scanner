@@ -88,7 +88,9 @@ public final class ConfigBuilder {
     private static void requireTopic(MutableValues values) throws ConfigLoadException {
         if (values.topic == null || values.topic.trim().isEmpty()) {
             throw new ConfigLoadException(
-                    "missing required config: topic (set via --topic=, SCANNER_TOPIC, or the config file)");
+                    "missing required config: no topic set -- add --topic=<name> to the command line, "
+                            + "e.g. --topic=orders (also settable via the SCANNER_TOPIC env var or a "
+                            + "topic= line in the config file)");
         }
     }
 
