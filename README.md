@@ -313,10 +313,11 @@ gets a specific message instead of a generic "unknown flag".
 | `--kafka.<prop>=<val>` | no | — | Kafka client property passthrough, repeatable for different keys; `<prop>` must be a real client property name for the operation in effect (see below) |
 | `--jvm.<prop>=<val>` | no | — | Arbitrary JVM system property, applied via `System.setProperty` before the consumer is built (see [SASL / Kerberos](#sasl--kerberos)) |
 | `--match.key=<val>` | no | — | Match records whose key contains `<val>` (see [Filters](#filters)) |
+| `--match.value=<text>` | no | — | Match records whose whole value contains `<text>` -- no JSON path needed, works on non-JSON values too (see [Filters](#filters)) |
 | `--match.header=<n>=<v>` | no | — | Match records with header `<n>` containing `<v>`; repeatable, ANDed together |
 | `--match.field=<spec>` | no | — | Match a JSON field in the record value; repeatable, ANDed together |
-| `--match.exact` | no | off | Require `match.key`/`match.header` to match the full value, not a substring |
-| `--match.case-sensitive` | no | off | Compare `match.key`/`match.header` case-sensitively |
+| `--match.exact` | no | off | Require `match.key`/`match.header`/`match.value` to match the full value, not a substring |
+| `--match.case-sensitive` | no | off | Compare `match.key`/`match.header`/`match.value` case-sensitively |
 | `--limit=<n>` | no | `50` (0 = unlimited, only via an explicit `--limit=0`) | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
 | `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
 | `--partition=<n>` | no | all, interleaved | Restrict a scan/`--describe` to one partition, or pin which partition `--produce` sends to (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
@@ -618,11 +619,20 @@ java -jar target/kafka-inspect.jar --topic=orders --from=latest --follow --limit
 All given filters are ANDed together — a record must satisfy every one.
 With no filters, every record matches.
 
-**`--match.key`** and **`--match.header`** default to **case-insensitive
-substring** — `--match.key=order` matches a key of `ORDER-123`. Two flags
-tighten this per-run (grep-style), applying to both uniformly:
+**`--match.key`**, **`--match.value`**, and **`--match.header`** default to
+**case-insensitive substring** — `--match.key=order` matches a key of
+`ORDER-123`. Two flags tighten this per-run (grep-style), applying to all
+three uniformly:
 - `--match.exact` — require the full value, not just a substring.
 - `--match.case-sensitive` — turn off the default case-insensitive fold.
+
+**`--match.value`** searches the entire record value as plain text, with no
+JSON-awareness at all — unlike `--match.field` below, it doesn't need a
+specific field path, and it works on values that aren't valid JSON (where
+`--match.field` would simply never match). This is the tool to reach for
+when you know roughly what you're looking for but not exactly where it
+lives in the record: `--match.value=brothers` finds `{"id":2,
+"brothers": 3}` without needing to know `brothers` is a top-level field.
 
 `--match.header=name=value` is repeatable for multiple headers (all must
 match). A record missing a named header never matches it — that's
@@ -679,6 +689,9 @@ to scan and discard everything else first.
 # key contains "1003"
 java -jar target/kafka-inspect.jar --topic=kc-orders --match.key=1003
 
+# whole value contains "brothers" -- no JSON path needed, works on non-JSON too
+java -jar target/kafka-inspect.jar --topic=kc-orders --match.value=brothers
+
 # header AND field, combined
 java -jar target/kafka-inspect.jar --topic=kc-orders --match.header=source=web --match.field=status=NEW
 
@@ -721,10 +734,11 @@ SCANNER_TOPIC=kc-orders java -jar target/kafka-inspect.jar --kafka.bootstrap.ser
 `kafka.*` and `jvm.*` passthrough both have an env equivalent:
 `SCANNER_KAFKA_<NAME>` and `SCANNER_JVM_<NAME>` (uppercase, dots become
 underscores — e.g. `SCANNER_KAFKA_BOOTSTRAP_SERVERS`). `from`, `until`,
-`match.key`, `match.exact`, `match.case-sensitive`, `follow`, `limit`, and
-`output` do too (`SCANNER_FROM`, `SCANNER_UNTIL`, `SCANNER_MATCH_KEY`,
-`SCANNER_MATCH_EXACT`, `SCANNER_MATCH_CASE_SENSITIVE`, `SCANNER_FOLLOW`,
-`SCANNER_LIMIT`, `SCANNER_OUTPUT`).
+`match.key`, `match.value`, `match.exact`, `match.case-sensitive`, `follow`,
+`limit`, and `output` do too (`SCANNER_FROM`, `SCANNER_UNTIL`,
+`SCANNER_MATCH_KEY`, `SCANNER_MATCH_VALUE`, `SCANNER_MATCH_EXACT`,
+`SCANNER_MATCH_CASE_SENSITIVE`, `SCANNER_FOLLOW`, `SCANNER_LIMIT`,
+`SCANNER_OUTPUT`).
 
 `match.header`/`match.field` are list-valued and have **no env-var form at
 all** — only the CLI's repeatable flags or the file's numbered keys
@@ -917,7 +931,7 @@ src/main/java/kscan/
   config/                config file + env + CLI merge and validation
   kafka/                 the three classes that touch connection/auth settings (consumer, admin, producer)
   scan/                  pure scan/filter logic (testable without a broker)
-  filter/                match.key/match.header/match.field filters, ANDed together
+  filter/                match.key/match.value/match.header/match.field filters, ANDed together
   output/                output writers: pretty, json (NDJSON), count
   produce/               --produce's record-building (ProducerRecordBuilder) and send (MessageSender) logic
 src/test/java/kscan/     unit tests (MockConsumer-based)

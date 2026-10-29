@@ -51,16 +51,22 @@ limit=50
 # ── Filters ──────────────────────────────────────────────────────────────
 #
 # All given filters are ANDed together. With none set, every record
-# matches (match.key/match.exact/match.case-sensitive have no env-var
-# override for match.header/match.field -- see README's Filters section
-# for why; those two are CLI-repeatable-flag or numbered-key-here only).
+# matches (match.key/match.value/match.exact/match.case-sensitive have no
+# env-var override for match.header/match.field -- see README's Filters
+# section for why; those two are CLI-repeatable-flag or numbered-key-here
+# only).
 
 # Exact text (well, substring -- see below) to look for in the record key.
 # match.key=1003
 
-# match.key/match.header default to case-insensitive SUBSTRING matching
-# (--match.key=order matches a key of ORDER-123). Set to true to require
-# the full value instead of a substring, or to compare case-sensitively.
+# Substring to look for anywhere in the whole record value -- no JSON path
+# needed, and works on non-JSON values too (unlike match.field below).
+# match.value=brothers
+
+# match.key/match.value/match.header default to case-insensitive SUBSTRING
+# matching (--match.key=order matches a key of ORDER-123). Set to true to
+# require the full value instead of a substring, or to compare
+# case-sensitively.
 # match.exact=false
 # match.case-sensitive=false
 

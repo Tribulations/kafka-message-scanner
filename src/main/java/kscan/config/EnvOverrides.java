@@ -38,6 +38,8 @@ final class EnvOverrides {
             values.output = value;
         } else if (envKey.equals("SCANNER_MATCH_KEY")) {
             values.matchKey = value;
+        } else if (envKey.equals("SCANNER_MATCH_VALUE")) {
+            values.matchValue = value;
         } else if (envKey.equals("SCANNER_MATCH_EXACT")) {
             values.matchExact = StrictParsers.parseBoolean(envKey, value, values.matchExact);
         } else if (envKey.equals("SCANNER_MATCH_CASE_SENSITIVE")) {

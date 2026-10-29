@@ -12,7 +12,7 @@ final class FileDefaults {
 
     private static final Set<String> KNOWN_SCALAR_KEYS =
             setOf("topic", "from", "until", "follow", "limit", "output",
-                    "match.key", "match.exact", "match.case-sensitive");
+                    "match.key", "match.value", "match.exact", "match.case-sensitive");
     private static final Set<String> KNOWN_PREFIXES =
             setOf("kafka.", "jvm.", "match.header.", "match.field.");
     private static final String KAFKA_PREFIX = "kafka.";
@@ -45,6 +45,7 @@ final class FileDefaults {
         values.limit = StrictParsers.parseLong("limit", fileProps.getProperty("limit"), DEFAULT_LIMIT);
         values.output = fileProps.getProperty("output", DEFAULT_OUTPUT);
         values.matchKey = fileProps.getProperty("match.key");
+        values.matchValue = fileProps.getProperty("match.value");
         values.matchExact = StrictParsers.parseBoolean("match.exact", fileProps.getProperty("match.exact"), false);
         values.matchCaseSensitive = StrictParsers.parseBoolean(
                 "match.case-sensitive", fileProps.getProperty("match.case-sensitive"), false);

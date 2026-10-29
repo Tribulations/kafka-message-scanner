@@ -44,6 +44,9 @@ final class CliOverrides {
         if (cli.getSingle("match.key") != null) {
             values.matchKey = cli.getSingle("match.key");
         }
+        if (cli.getSingle("match.value") != null) {
+            values.matchValue = cli.getSingle("match.value");
+        }
         if (cli.hasFlag("match.exact")) {
             values.matchExact = true;
         }

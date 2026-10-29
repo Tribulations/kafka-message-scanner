@@ -90,6 +90,10 @@ final class KscanCli {
             + "                        --jvm.java.security.krb5.conf=/etc/krb5.conf\n"
             + "  --match.key=<val>     match records whose key contains <val> (case-insensitive substring)\n"
             + "                        e.g. --match.key=order-42\n"
+            + "  --match.value=<text>  match records whose whole value contains <text> (case-insensitive\n"
+            + "                        substring) -- unlike --match.field, this needs no JSON path and\n"
+            + "                        works on non-JSON values too\n"
+            + "                        e.g. --match.value=brothers\n"
             + "  --match.header=<n>=<v> match records with header <n> containing <v>; repeatable, ANDed together\n"
             + "                        e.g. --match.header=source=web\n"
             + "  --match.field=<spec>  match JSON field in the record value; repeatable, ANDed together\n"
@@ -112,8 +116,9 @@ final class KscanCli {
             + "                             --match.field=customer.id~^c-   (dotted path, substring regex)\n"
             + "                             --match.field=ts~^2026-10-22   (all timestamps on that day)\n"
             + "                             --match.field='mountain~.*'    (\"wildcard\": matches any value)\n"
-            + "  --match.exact         require match.key/match.header to match the full value, not a substring\n"
-            + "  --match.case-sensitive  compare match.key/match.header case-sensitively\n"
+            + "  --match.exact         require match.key/match.header/match.value to match the full value,\n"
+            + "                        not a substring\n"
+            + "  --match.case-sensitive  compare match.key/match.header/match.value case-sensitively\n"
             + "  --limit=<n>           stop after n matches (default: 50; 0 = unlimited, only via an\n"
             + "                        explicit --limit=0); with --follow, blocks until n matches\n"
             + "                        show up, then exits\n"
@@ -169,7 +174,7 @@ final class KscanCli {
 
     private static Set<String> knownValueKeys() {
         return setOf("config", "topic", "from", "until", "limit", "max-messages", "partition", "output", "fields",
-                "distinct", "delay", "match.key", "match.header", "match.field",
+                "distinct", "delay", "match.key", "match.value", "match.header", "match.field",
                 "key", "value", "value-file", "header");
     }
 

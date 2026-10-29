@@ -43,8 +43,8 @@ public final class ConfigBuilder {
             requireTopic(values);
         }
 
-        MatchConfig match = new MatchConfig(values.matchKey, values.matchHeaderRaw, values.matchFieldRaw,
-                values.matchExact, values.matchCaseSensitive);
+        MatchConfig match = new MatchConfig(values.matchKey, values.matchValue, values.matchHeaderRaw,
+                values.matchFieldRaw, values.matchExact, values.matchCaseSensitive);
         Path configFileUsed = resolution.path != null && Files.isRegularFile(resolution.path)
                 ? resolution.path : null;
 
@@ -124,6 +124,7 @@ public final class ConfigBuilder {
         String distinct;
         long delay;
         String matchKey;
+        String matchValue;
         List<String> matchHeaderRaw = new ArrayList<>();
         List<String> matchFieldRaw = new ArrayList<>();
         boolean matchExact;

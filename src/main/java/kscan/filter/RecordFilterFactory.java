@@ -19,6 +19,9 @@ public final class RecordFilterFactory {
         if (match.key() != null) {
             filters.add(new KeyFilter(match.key(), match.exact(), match.caseSensitive()));
         }
+        if (match.value() != null) {
+            filters.add(new ValueFilter(match.value(), match.exact(), match.caseSensitive()));
+        }
         if (!match.headerRaw().isEmpty()) {
             filters.add(HeaderFilter.parse(match.headerRaw(), match.exact(), match.caseSensitive()));
         }

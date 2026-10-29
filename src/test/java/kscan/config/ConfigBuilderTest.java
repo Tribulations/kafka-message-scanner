@@ -136,6 +136,16 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void matchValueFlowsThroughToConfig(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli("--match.value=brothers"), configFile,
+                Collections.emptyMap());
+
+        assertEquals("brothers", config.match().value());
+    }
+
+    @Test
     void limitFollowAndOutputMergeAcrossFileEnvAndCli(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir,
                 "topic=t\nkafka.bootstrap.servers=localhost:9092\nlimit=5\nfollow=false\noutput=pretty\n");
@@ -704,7 +714,7 @@ class ConfigBuilderTest {
 
     private static Set<String> knownValueKeys() {
         return setOf("config", "topic", "from", "until", "limit", "max-messages", "partition", "output", "fields",
-                "distinct", "delay", "match.key", "match.header", "match.field",
+                "distinct", "delay", "match.key", "match.value", "match.header", "match.field",
                 "key", "value", "value-file", "header");
     }
 
