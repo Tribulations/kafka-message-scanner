@@ -1,6 +1,6 @@
 .TH KAFKA-INSPECT 1 "2026-10-19" "kafka-inspect" "User Commands"
 .SH NAME
-kafka-inspect \- scan, describe, or produce to a Kafka topic (messages matching a key/header/field, size/metadata, or sending one message)
+kafka-inspect \- scan, describe, list consumers of, or produce to a Kafka topic (messages matching a key/header/field, size/metadata, who's consuming it, or sending one message)
 .SH SYNOPSIS
 .B kafka-inspect
 .B \-\-topic=\fIname\fR
@@ -43,6 +43,13 @@ Check a topic's size before a destructive operation (message count, and best\-ef
 .RS
 .EX
 kafka-inspect \-\-describe \-\-topic=orders
+.EE
+.RE
+.TP
+Find who's consuming a topic right now (group, host/IP, assigned partitions)
+.RS
+.EX
+kafka-inspect \-\-consumers \-\-topic=orders
 .EE
 .RE
 .TP

@@ -41,6 +41,12 @@ final class KscanApp {
                 return DescribeRunner.describe(adminProps, config);
             }
 
+            if (cli.hasFlag("consumers")) {
+                Properties adminProps = StartupPipeline.buildAdminProperties(config);
+
+                return ConsumersRunner.consumers(adminProps, config);
+            }
+
             if (cli.hasFlag("produce")) {
                 Properties producerProps = StartupPipeline.buildProducerProperties(config);
                 Properties adminProps = StartupPipeline.buildAdminPropertiesForProduce(config);

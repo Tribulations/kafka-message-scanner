@@ -124,6 +124,79 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void consumersRequiresTopic(@TempDir Path dir) {
+        Path configFile = writeConfigUnchecked(dir, "kafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class,
+                () -> ConfigBuilder.build(cli("--consumers"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void consumersIsFineWithPartition(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        ScannerConfig config = ConfigBuilder.build(cli("--consumers", "--partition=0"), configFile,
+                Collections.emptyMap());
+        assertEquals(Integer.valueOf(0), config.partition());
+    }
+
+    @Test
+    void consumersConflictsWithDescribe(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--describe"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void consumersConflictsWithListTopics(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--list-topics"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void consumersConflictsWithProduce(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--produce", "--value=hello"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void consumersConflictsWithFollow(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--follow"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void consumersConflictsWithFields(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--fields=value"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void consumersConflictsWithDistinct(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--output=distinct", "--distinct=key"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
+    void consumersConflictsWithRawOutput(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--output=raw", "--limit=1"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void cliMatchHeaderReplacesRatherThanAppendsToTheFileList(@TempDir Path dir) throws Exception {
         Path configFile = writeConfig(dir,
                 "topic=t\nkafka.bootstrap.servers=localhost:9092\n"
@@ -440,6 +513,14 @@ class ConfigBuilderTest {
     }
 
     @Test
+    void delayConflictsWithConsumers(@TempDir Path dir) throws Exception {
+        Path configFile = writeConfig(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
+
+        assertThrows(ConfigLoadException.class, () -> ConfigBuilder.build(
+                cli("--consumers", "--delay=500"), configFile, Collections.emptyMap()));
+    }
+
+    @Test
     void negativeDelayIsRejected(@TempDir Path dir) {
         Path configFile = writeConfigUnchecked(dir, "topic=t\nkafka.bootstrap.servers=localhost:9092\n");
 
@@ -719,7 +800,7 @@ class ConfigBuilderTest {
     }
 
     private static Set<String> knownBooleanKeys() {
-        return setOf("help", "list-topics", "describe", "follow", "match.exact", "match.case-sensitive",
+        return setOf("help", "list-topics", "describe", "consumers", "follow", "match.exact", "match.case-sensitive",
                 "produce", "tombstone");
     }
 

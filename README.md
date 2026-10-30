@@ -304,6 +304,7 @@ gets a specific message instead of a generic "unknown flag".
 | `--config=<path>` | no | next to the jar | Path to a `scanner.properties`-style file |
 | `--list-topics` | no | off | List topic names on the cluster and exit; `--topic=` not required |
 | `--describe` | no | off | Print a per-partition size/metadata summary for `--topic=` (required) and exit; combine with `--partition=` to restrict to one (see [Describing a topic](#describing-a-topic)) |
+| `--consumers` | no | off | List consumer group members assigned a partition of `--topic=` (required), with their host/IP, and exit; combine with `--partition=` to restrict to one (see [Finding a topic's consumers](#finding-a-topics-consumers)) |
 | `--produce` | no | off | Send one message to `--topic=` (required, given explicitly on the CLI) and exit — this tool's only write operation (see [Producing a message](#producing-a-message)) |
 | `--key=<string>` | no | none (unkeyed) | The `--produce` message key (CLI-only) |
 | `--value=<string>` | exactly one of these three, with `--produce` | — | The `--produce` message value, as a literal string (CLI-only) |
@@ -320,7 +321,7 @@ gets a specific message instead of a generic "unknown flag".
 | `--match.case-sensitive` | no | off | Compare `match.key`/`match.header`/`match.value` case-sensitively |
 | `--limit=<n>` | no | `50` (0 = unlimited, only via an explicit `--limit=0`) | Stop after `n` matches; with `--follow`, blocks until `n` matches show up, then exits |
 | `--max-messages=<n>` | no | — | Alias for `--limit` (same meaning) — Kafka's own console-consumer tooling uses this name; give only one of the two |
-| `--partition=<n>` | no | all, interleaved | Restrict a scan/`--describe` to one partition, or pin which partition `--produce` sends to (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
+| `--partition=<n>` | no | all, interleaved | Restrict a scan/`--describe`/`--consumers` to one partition, or pin which partition `--produce` sends to (CLI-only, no file/env form — see [Restricting to one partition](#restricting-to-one-partition)) |
 | `--output=<mode>` | no | `pretty` | `pretty` \| `json` \| `count` \| `distinct` (see [Output modes](#output-modes)) |
 | `--fields=<list>` | no | all | Restrict a pretty-output block to comma-separated sections: `metadata`, `key`, `headers`, `value` (CLI-only; only valid with `--output=pretty`, see [Output modes](#output-modes)) |
 | `--distinct=<spec>` | only with `--output=distinct` | — | `key` \| `header:<name>` \| `field:<path>` to count (CLI-only, see [Distinct values](#distinct-values)) |
@@ -392,6 +393,32 @@ the ladder as needed — e.g. `202.21 KB`, `3.89 MB`), not a raw byte count.
 ```bash
 java -jar target/kafka-inspect.jar --describe --topic=orders
 java -jar target/kafka-inspect.jar --describe --topic=orders --partition=0
+```
+
+### Finding a topic's consumers
+
+`--consumers` lists which consumer group members currently have a
+partition of `--topic=` assigned (required), plus the host/IP the broker
+itself recorded for that member's connection — useful for tracking down who
+is actually reading a topic in production. Combine with `--partition=<n>`
+to restrict to members holding that one partition.
+
+Kafka's protocol has no "find groups by topic" request, so this is always
+enumerate-then-filter under the hood: list every consumer group on the
+cluster, describe them all in one batched `Admin` call, then keep only the
+members whose assignment touches the target topic — the same approach (and
+the same cost on a cluster with very many groups) `kafka-consumer-groups.sh
+--describe --all-groups` has. It's admin-only, like `--describe` — never
+opens a `Consumer` itself. `--limit=`/`--from=`/`--until=`/`--match.*` have
+no effect here (same as `--describe`), and `--fields=`/`--distinct=`/
+`--delay=`/`--output=raw` all error rather than silently doing nothing. A
+topic with no active consumers right now isn't an error — it prints a clear
+"no consumers found" line and exits 0, the same "this is a report, not a
+scan" reasoning `--describe` already uses for a zero-partition result.
+
+```bash
+java -jar target/kafka-inspect.jar --consumers --topic=orders
+java -jar target/kafka-inspect.jar --consumers --topic=orders --partition=0
 ```
 
 ### Producing a message
@@ -915,18 +942,20 @@ scanner.properties       config file template, fully commented
 kafka_client_jaas.conf.example   external JAAS file example for Kerberos
 src/main/java/kscan/
   Main.java                 entry point only: System.exit(KscanApp.run(args))
-  KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics/describe/produce -> exit code
+  KscanApp.java             orchestrates one run: CLI -> config -> scan/list-topics/describe/consumers/produce -> exit code
   KscanCli.java             kafka-inspect's flag schema, --help text, and CLI parsing wiring
   StartupPipeline.java      turns parsed CLI args into validated config/kafka-props/admin-props/producer-props/filter/etc.
   ScanRunner.java           opens the consumer, runs the scan or --list-topics, reports the result
   DescribeRunner.java       opens an Admin client and runs --describe, reports the result
+  ConsumersRunner.java      opens an Admin client and runs --consumers, reports the result
   ProduceRunner.java        opens an Admin client (topic-existence check) then a Producer, sends --produce's message
-  RunSummary.java           builds the stderr connecting/result summary lines ScanRunner/DescribeRunner/ProduceRunner print
+  RunSummary.java           builds the stderr connecting/result summary lines ScanRunner/DescribeRunner/ConsumersRunner/ProduceRunner print
   ScanRiskWarnings.java     builds the stderr WARNING lines for costly scan shapes (see below)
   ShutdownCoordinator.java  Ctrl-C/SIGTERM handling so --follow exits 0/1/2, never 143
   ExitSignal.java           shared exit-code-carrying exception used across the above
   admin/                 --describe's Admin-based size/metadata fetching and plain-text formatting, plus
-                         TopicExistenceChecker (shared with --produce's own pre-send existence check)
+                         --consumers' enumerate-then-filter group lookup, and TopicExistenceChecker
+                         (shared with --produce's own pre-send existence check)
   cli/                   strict CLI argument parsing
   config/                config file + env + CLI merge and validation
   kafka/                 the three classes that touch connection/auth settings (consumer, admin, producer)
@@ -970,3 +999,12 @@ packaging/check-bytecode.py    release gate: fails the build on any non-Java-8 c
   they may be silently omitted on a cluster/credential that doesn't grant
   it, with a clear stderr note explaining why; the required message-count
   data is never affected by this.
+- `--consumers` always enumerates **every consumer group on the cluster**
+  before filtering to the ones touching `--topic=` — Kafka's Admin API has
+  no "find groups by topic" request, so this is the same cost
+  `kafka-consumer-groups.sh --describe --all-groups` has, and it can be slow
+  on a cluster with very many groups.
+- `--consumers` needs the cluster-level Describe permission on consumer
+  groups; unlike `--describe`'s byte-size column, there's nothing meaningful
+  left to show without it, so a missing permission is a normal exit-2 error
+  here, not a best-effort column.

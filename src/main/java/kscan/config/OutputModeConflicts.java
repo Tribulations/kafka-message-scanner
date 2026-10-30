@@ -15,6 +15,7 @@ final class OutputModeConflicts {
     static void validate(ConfigBuilder.MutableValues values, CliArgs cli) throws ConfigLoadException {
         requireDescribeNotWithListTopics(cli);
         requireProduceNotWithDescribeListTopicsFollow(cli);
+        requireConsumersNotWithDescribeListTopicsProduceFollow(cli);
         requireFieldsOnlyWithPrettyOutput(values, cli);
         requireDistinctAndOutputTogether(values, cli);
         requireDelayOnlyWithFollow(values, cli);
@@ -44,6 +45,33 @@ final class OutputModeConflicts {
             throw new ConfigLoadException(
                     "--produce and --follow are mutually exclusive -- --produce sends exactly one "
                             + "message per invocation, there's nothing to follow");
+        }
+    }
+
+    /**
+     * --consumers is another admin-only "ask the cluster something and exit" operation, the same
+     * category --describe/--list-topics are in -- mutually exclusive with both, and with --produce
+     * (a write) and --follow (v1 reports the current assignment once, there's nothing to keep
+     * following for).
+     */
+    private static void requireConsumersNotWithDescribeListTopicsProduceFollow(CliArgs cli)
+            throws ConfigLoadException {
+        if (!cli.hasFlag("consumers")) {
+            return;
+        }
+        if (cli.hasFlag("describe")) {
+            throw new ConfigLoadException("--consumers and --describe are mutually exclusive -- give only one");
+        }
+        if (cli.hasFlag("list-topics")) {
+            throw new ConfigLoadException("--consumers and --list-topics are mutually exclusive -- give only one");
+        }
+        if (cli.hasFlag("produce")) {
+            throw new ConfigLoadException("--consumers and --produce are mutually exclusive -- give only one");
+        }
+        if (cli.hasFlag("follow")) {
+            throw new ConfigLoadException(
+                    "--consumers and --follow are mutually exclusive -- --consumers reports the current "
+                            + "assignment once, there's nothing to follow");
         }
     }
 
@@ -134,6 +162,9 @@ final class OutputModeConflicts {
         if (cli.hasFlag("describe")) {
             throw new ConfigLoadException("--fields has no effect with --describe -- give only one");
         }
+        if (cli.hasFlag("consumers")) {
+            throw new ConfigLoadException("--fields has no effect with --consumers -- give only one");
+        }
         if (cli.hasFlag("produce")) {
             throw new ConfigLoadException("--fields has no effect with --produce -- give only one");
         }
@@ -172,6 +203,9 @@ final class OutputModeConflicts {
         if (cli.hasFlag("describe")) {
             throw new ConfigLoadException("--distinct has no effect with --describe -- give only one");
         }
+        if (cli.hasFlag("consumers")) {
+            throw new ConfigLoadException("--distinct has no effect with --consumers -- give only one");
+        }
         if (cli.hasFlag("produce")) {
             throw new ConfigLoadException("--distinct has no effect with --produce -- give only one");
         }
@@ -198,12 +232,16 @@ final class OutputModeConflicts {
         if (values.delay == 0) {
             return;
         }
-        // Checked before the generic "needs --follow" rejection below: --produce can never be
-        // combined with --follow anyway (requireProduceNotWithDescribeListTopicsFollow), so telling
-        // a --produce --delay= caller to "add --follow" would just walk them into a second, more
-        // confusing rejection -- the real, actionable reason is "no effect with --produce" directly.
+        // Checked before the generic "needs --follow" rejection below: --produce/--consumers can
+        // never be combined with --follow anyway (requireProduceNotWithDescribeListTopicsFollow,
+        // requireConsumersNotWithDescribeListTopicsProduceFollow), so telling a --produce/--consumers
+        // --delay= caller to "add --follow" would just walk them into a second, more confusing
+        // rejection -- the real, actionable reason is "no effect with --produce/--consumers" directly.
         if (cli.hasFlag("produce")) {
             throw new ConfigLoadException("--delay has no effect with --produce -- give only one");
+        }
+        if (cli.hasFlag("consumers")) {
+            throw new ConfigLoadException("--delay has no effect with --consumers -- give only one");
         }
         if (!values.follow) {
             throw new ConfigLoadException(
@@ -240,6 +278,9 @@ final class OutputModeConflicts {
         }
         if (cli.hasFlag("describe")) {
             throw new ConfigLoadException("--output=raw has no effect with --describe -- give only one");
+        }
+        if (cli.hasFlag("consumers")) {
+            throw new ConfigLoadException("--output=raw has no effect with --consumers -- give only one");
         }
         if (cli.hasFlag("produce")) {
             throw new ConfigLoadException("--output=raw has no effect with --produce -- give only one");
