@@ -13,10 +13,9 @@
 # the tool grew beyond pure message-scanning (see --describe).
 Name:           kafka-inspect
 Version:        %{_version}
-Release:        4%{?dist }
+Release:        1%{?dist }
 Summary:        Kafka topic/message inspector (debugging/analysis CLI)
 License:        Proprietary
-URL:            https://example.invalid/kafka-inspect
 BuildArch:      noarch
 
 # Deliberately no "Requires: java-*" -- target hosts already provision
